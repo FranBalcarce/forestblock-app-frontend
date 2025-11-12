@@ -1,15 +1,16 @@
-import React, { useState } from "react";
-import SortDropdown from "@/components/SortDropdown/SortDropdown";
-import SkeletonLoader from "@/components/SkeletonLoader/SkeletonLoader";
-import ProjectCard from "@/components/ProjectCard/ProjectCard";
-import { ProjectListProps } from "./types";
-import ViewToggle from "../ViewToggle/ViewToggle";
-import MapView from "../ProjectInfo/MapView";
-import { useGallery } from "@/hooks/useGallery";
-import { FiFilter } from "react-icons/fi";
+import React, { useState } from 'react';
+import SortDropdown from '@/components/SortDropdown/SortDropdown';
+import SkeletonLoader from '@/components/SkeletonLoader/SkeletonLoader';
+import ProjectCard from '@/components/ProjectCard/ProjectCard';
+import { ProjectListProps } from './types';
+import ViewToggle from '../ViewToggle/ViewToggle';
+import MapView from '../ProjectInfo/MapView';
+import { useGallery } from '@/hooks/useGallery';
+import { FiFilter } from 'react-icons/fi';
 
 interface ExtendedProjectListProps extends ProjectListProps {
   openFilters: () => void;
+  actionRenderer?: (project: ProjectListProps['projects'][number]) => React.ReactNode;
 }
 
 const ProjectList: React.FC<ExtendedProjectListProps> = ({
@@ -18,30 +19,29 @@ const ProjectList: React.FC<ExtendedProjectListProps> = ({
   sortBy,
   setSortBy,
   openFilters,
+  actionRenderer,
 }) => {
-  const [currentView, setCurrentView] = useState("grid");
-  const { customIcon } = useGallery({
-    images: projects.map((p) => p.images[0]),
-  });
+  const [currentView, setCurrentView] = useState('grid');
+  const { customIcon } = useGallery({ images: projects.map((p) => p.images[0]) });
 
   const renderProjects = () => {
-    if (currentView === "grid") {
+    if (currentView === 'grid') {
       return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 z-5">
           {projects.map((project) => (
-            <ProjectCard key={project.key} project={project} />
+            <ProjectCard key={project.key} project={project} actionRenderer={actionRenderer} />
           ))}
         </div>
       );
-    } else if (currentView === "list") {
+    } else if (currentView === 'list') {
       return (
         <div className="flex flex-col gap-4">
           {projects.map((project) => (
-            <ProjectCard key={project.key} project={project} />
+            <ProjectCard key={project.key} project={project} actionRenderer={actionRenderer} />
           ))}
         </div>
       );
-    } else if (currentView === "map") {
+    } else if (currentView === 'map') {
       const projectLocations = projects.map((project) => ({
         coordinates: [
           project.location.geometry.coordinates[1],
@@ -52,10 +52,7 @@ const ProjectList: React.FC<ExtendedProjectListProps> = ({
 
       return (
         <div className="h-96 bg-gray-200">
-          <MapView
-            projectLocations={projectLocations}
-            customIcon={customIcon}
-          />
+          <MapView projectLocations={projectLocations} customIcon={customIcon} />
         </div>
       );
     }
@@ -72,7 +69,6 @@ const ProjectList: React.FC<ExtendedProjectListProps> = ({
           <FiFilter /> Filtrar
         </button>
         <ViewToggle currentView={currentView} setView={setCurrentView} />
-        {/* Botón "Filtrar" para mobile */}
       </div>
 
       {loading ? <SkeletonLoader /> : renderProjects()}

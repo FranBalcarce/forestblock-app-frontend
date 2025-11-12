@@ -1,11 +1,16 @@
-import { useRouter } from "next/navigation";
-import { Project } from "@/types/project";
-import BackgroundImage from "./BackgroundImage";
-import OverlayContent from "./OverlayContent";
-import { formatVintages } from "@/utils/formatVintages";
-import { getProjectImage } from "@/utils/getProjectImage";
+import { useRouter } from 'next/navigation';
+import { Project } from '@/types/project';
+import BackgroundImage from './BackgroundImage';
+import OverlayContent from './OverlayContent';
+import { formatVintages } from '@/utils/formatVintages';
+import { getProjectImage } from '@/utils/getProjectImage';
 
-export default function ProjectCard({ project }: { project: Project }) {
+interface ProjectCardProps {
+  project: Project;
+  actionRenderer?: (project: Project) => React.ReactNode; // opcional
+}
+
+export default function ProjectCard({ project, actionRenderer }: ProjectCardProps) {
   const router = useRouter();
 
   const handlePurchase = () => {
@@ -30,6 +35,12 @@ export default function ProjectCard({ project }: { project: Project }) {
         sdgs={project.sustainableDevelopmentGoals.length}
         sdgsArray={project.sustainableDevelopmentGoals}
       />
+
+      {actionRenderer && (
+        <div className="absolute bottom-4 left-0 right-0 flex justify-center">
+          {actionRenderer(project)}
+        </div>
+      )}
     </div>
   );
 }
