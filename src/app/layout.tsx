@@ -1,13 +1,10 @@
 // src/app/layout.tsx
 import './globals.css';
 import 'leaflet/dist/leaflet.css';
-import type { Metadata } from 'next';
 
-import { AuthProvider } from '@/context/AuthContext';
-import { RetireProvider } from '@/context/RetireContext';
-import { ModalProvider } from '@/context/ModalContext'; // 👈 IMPORTANTE
-import AuthGuard from './AuthGuard';
-import DesktopSidebar from '@/components/Sidebar/DesktopSidebar';
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import RootClient from '@/components/RootClient';
 
 export const metadata: Metadata = {
   title: 'Forestblock',
@@ -18,20 +15,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <body>
-        <AuthProvider>
-          <RetireProvider>
-            <ModalProvider>
-              {' '}
-              {/* 👈 envuelve todo lo que usa useModal */}
-              <AuthGuard>
-                <div className="flex">
-                  <DesktopSidebar />
-                  <main className="flex-1">{children}</main>
-                </div>
-              </AuthGuard>
-            </ModalProvider>
-          </RetireProvider>
-        </AuthProvider>
+        <Suspense fallback={null}>
+          <RootClient>{children}</RootClient>
+        </Suspense>
       </body>
     </html>
   );

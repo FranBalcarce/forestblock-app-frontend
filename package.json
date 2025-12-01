@@ -29,6 +29,7 @@
     "react-popper": "^2.3.0",
     "react-window": "^1.8.11",
     "recharts": "^2.15.1",
+    "resend": "^6.5.0",
     "world-countries": "^5.0.0"
   },
   "devDependencies": {

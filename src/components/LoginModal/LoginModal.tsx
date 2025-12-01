@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useLogin } from '@/hooks/useLogin';
 import { useAuth } from '@/context/AuthContext';
 import Image from 'next/image';
@@ -16,21 +16,14 @@ export const LoginModal: React.FC = () => {
     error,
     setError,
     isLoading,
+    setCaptchaToken,
   } = useLogin();
 
-  const [captchaToken, setCaptchaToken] = useState<string>("");
   const { isAuthenticated, redirectUrl, setRedirectUrl } = useAuth();
   const { closeModal } = useModal();
   const router = useRouter();
 
-  useEffect(() => {
-    window.addEventListener("unhandledrejection", e => {
-      console.log("🔴 unhandledrejection:", e.reason);
-    });
-    return () => {
-      window.removeEventListener("unhandledrejection", () => {});
-    };
-  }, []);
+  const showCaptcha = process.env.NEXT_PUBLIC_ENVIRONMENT === 'production';
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -44,21 +37,15 @@ export const LoginModal: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!otpSent && !captchaToken) {
-      setError("Por favor, confirmá que no sos un robot");
-      return;
-    }
-
     try {
       if (!otpSent) {
-        await handleSendOTP(captchaToken);
+        await handleSendOTP();
       } else {
         await handleVerifyOTP(e);
       }
     } catch (err) {
-      console.error("❌ Error en handleSend/VerifyOTP:", err);
-      setError(err instanceof Error ? err.message : "Error enviando/verificando OTP");
+      console.error('❌ Error en handleSend/VerifyOTP:', err);
+      setError(err instanceof Error ? err.message : 'Error enviando/verificando OTP');
     }
   };
 
@@ -98,7 +85,7 @@ export const LoginModal: React.FC = () => {
         ) : (
           <div className="flex flex-col gap-2 items-center">
             <label htmlFor="email" className="font-neueMontreal text-[#767676] px-2 text-center">
-              Te enviamos un código a el email que ingresaste para verificar tu identidad
+              Te enviamos un código al email que ingresaste para verificar tu identidad
             </label>
             <input
               type="text"
@@ -112,13 +99,11 @@ export const LoginModal: React.FC = () => {
           </div>
         )}
 
-        {!otpSent && (
+        {!otpSent && showCaptcha && (
           <div className="flex justify-center my-4">
             <ReCAPTCHA
               sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ''}
-              onChange={token => {
-                setCaptchaToken(token || "");
-              }}
+              onChange={(token) => setCaptchaToken(token || null)}
             />
           </div>
         )}
@@ -139,6 +124,7 @@ export const LoginModal: React.FC = () => {
             : 'Continuar con email'}
         </button>
       </form>
+
       <div className="mt-4 text-sm text-gray-500">
         <a href="#" className="hover:underline">
           Privacidad

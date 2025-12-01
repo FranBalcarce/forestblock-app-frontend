@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { LuLayoutDashboard, LuLayoutGrid, LuPlug } from 'react-icons/lu';
-import { FaCarSide, FaRegBuilding, FaStar, FaRocket } from 'react-icons/fa';
+import { FaCarSide, FaRegBuilding, FaStar } from 'react-icons/fa';
 import { IoMdCart, IoLogoWhatsapp } from 'react-icons/io';
 import { MdOutlineForest } from 'react-icons/md';
 import { IoCloudyOutline, IoVideocam } from 'react-icons/io5';
@@ -12,11 +12,11 @@ export function useMenuItems(): MenuItem[] {
   const { user } = useAuth();
   const companyId = user?.manglaiCompanyId;
 
-  // evita /dashboard/undefined mientras carga el user
-  const d = (p: string) => (companyId ? `${p}/${companyId}` : p);
+  const items = useMemo<MenuItem[]>(() => {
+    // evita /dashboard/undefined mientras carga el user
+    const d = (p: string) => (companyId ? `${p}/${companyId}` : p);
 
-  return useMemo<MenuItem[]>(
-    () => [
+    return [
       // -------- FOREST-TRACK (0..1)
       {
         href: d('/dashboard'),
@@ -82,18 +82,18 @@ export function useMenuItems(): MenuItem[] {
       // -------- NEW FEATURE (4..5)
       {
         href: '/new-feature',
-        label: 'New Feature',
+        label: 'Proyectos en desarrollo',
         icon: <FaStar size={20} />,
         nestedRoutes: ['/new-feature/preorder'],
         queryKeys: [],
       },
-      {
-        href: '/new-feature/future',
-        label: 'Proyectos futuros',
-        icon: <FaRocket size={20} />,
-        nestedRoutes: ['/new-feature/preorder'],
-        queryKeys: [],
-      },
+      // {
+      //   href: '/new-feature/future',
+      //   label: 'Proyectos futuros',
+      //   icon: <FaRocket size={20} />,
+      //   nestedRoutes: ['/new-feature/preorder'],
+      //   queryKeys: [],
+      // },
 
       // -------- INFO (6..)
       {
@@ -112,9 +112,10 @@ export function useMenuItems(): MenuItem[] {
         queryKeys: [],
         target: '_blank',
       },
-    ],
-    [companyId]
-  );
+    ];
+  }, [companyId]);
+
+  return items;
 }
 
 export const useIsActive = (
