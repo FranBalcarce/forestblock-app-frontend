@@ -4,13 +4,10 @@ import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { Project } from '@/types/project';
 import Header from '@/components/new-feature/header';
-import dynamic from 'next/dynamic'; // 👈 NUEVO
+import dynamic from 'next/dynamic';
 
-// 👇 en vez de importar ProjectList directo, lo cargamos sólo en el cliente
-const ProjectList = dynamic(
-  () => import('@/components/Marketplace/ProjectList'),
-  { ssr: false } // importantísimo para evitar "window is not defined" por Leaflet
-);
+// 👇 Cargar ProjectList solo en el cliente (por Leaflet)
+const ProjectList = dynamic(() => import('@/components/Marketplace/ProjectList'), { ssr: false });
 
 type ProjectMinimal = {
   key: string;
@@ -86,12 +83,9 @@ const NewFeatureClient: React.FC = () => {
 
   const filtered: Project[] = useMemo(() => filteredMinimal.map(toFullProject), [filteredMinimal]);
 
-  const actionRenderer = (p: Project) => (
-    <Link
-      href={`/new-feature/${p.key}`}
-      className="inline-flex items-center rounded-xl px-4 py-2 border border-black/10 hover:bg-black/5 transition"
-    ></Link>
-  );
+  // ❌ Antes renderizaba un botón vacío dentro de cada card
+  // ✔ Ahora no renderiza nada
+  const actionRenderer = () => null;
 
   return (
     <div className="flex flex-col gap-8">
@@ -148,7 +142,7 @@ const NewFeatureClient: React.FC = () => {
           sortBy={sortBy}
           setSortBy={setSortBy}
           openFilters={() => {}}
-          actionRenderer={actionRenderer}
+          actionRenderer={actionRenderer} // 👈 ya sin botón
         />
       </div>
     </div>

@@ -5,9 +5,12 @@ import FilterSidebar from '@/components/FilterSidebar/FilterSidebar';
 import useMarketplace from '@/hooks/useMarketplace';
 import { SDG_TITLES, hardcodedVintages } from '@/constants/index';
 import HeaderSection from '@/components/Marketplace/HeaderSection';
-import ProjectList from '@/components/Marketplace/ProjectList';
 import TopBar from '@/components/TopBar/TopBar';
 import useMarketplaceFilters from '@/hooks/useMarketplaceFilters';
+import dynamic from 'next/dynamic'; // 👈 NUEVO
+
+// 👇 ProjectList solo en el cliente (evita "window is not defined" por Leaflet)
+const ProjectList = dynamic(() => import('@/components/Marketplace/ProjectList'), { ssr: false });
 
 const MarketplaceClient: React.FC = () => {
   const {
