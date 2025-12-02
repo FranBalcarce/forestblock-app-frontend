@@ -2,9 +2,15 @@
 
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
-import ProjectList from '@/components/Marketplace/ProjectList';
 import type { Project } from '@/types/project';
 import Header from '@/components/new-feature/header';
+import dynamic from 'next/dynamic'; // 👈 NUEVO
+
+// 👇 en vez de importar ProjectList directo, lo cargamos sólo en el cliente
+const ProjectList = dynamic(
+  () => import('@/components/Marketplace/ProjectList'),
+  { ssr: false } // importantísimo para evitar "window is not defined" por Leaflet
+);
 
 type ProjectMinimal = {
   key: string;
@@ -84,9 +90,7 @@ const NewFeatureClient: React.FC = () => {
     <Link
       href={`/new-feature/${p.key}`}
       className="inline-flex items-center rounded-xl px-4 py-2 border border-black/10 hover:bg-black/5 transition"
-    >
-      Completar formulario
-    </Link>
+    ></Link>
   );
 
   return (

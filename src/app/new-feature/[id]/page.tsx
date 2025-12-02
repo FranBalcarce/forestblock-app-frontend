@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
+import { useMemo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -19,6 +19,7 @@ const DEV_PROJECTS: DevProject[] = [
   {
     key: 'nf-azul-001',
     name: 'Captura Azul (Blue Carbon) – Piloto',
+    // 👇 Acá va la imagen del banner. Cambiala si tenés otra ruta.
     image: '/images/projects/blue-carbon.jpg',
     country: 'Argentina',
     year: 2024,
@@ -38,17 +39,12 @@ const DEV_PROJECTS: DevProject[] = [
   },
 ];
 
-const DevProjectDetailPage: React.FC = () => {
+export default function DevProjectDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
-  const projectId = params.id ?? '';
+  const projectId = params?.id ?? '';
 
   const project = useMemo(() => DEV_PROJECTS.find((p) => p.key === projectId), [projectId]);
-
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [company, setCompany] = useState('');
-  const [message, setMessage] = useState('');
 
   if (!project) {
     return (
@@ -61,14 +57,22 @@ const DevProjectDetailPage: React.FC = () => {
     );
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    alert('¡Gracias! Registramos tu interés (demo).');
-  };
+  // 👉 URL del formulario de contacto global (la que me pasaste)
+  const contactUrl = 'https://www.forestblock.tech/contact/contacto';
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 md:py-10">
-      {/* Header con imagen */}
+      {/* Botón volver arriba, fuera del banner */}
+      <button
+        type="button"
+        onClick={() => router.back()}
+        className="mb-4 inline-flex items-center gap-2 rounded-full bg-black/5 px-3 py-1.5 text-sm text-black hover:bg-black/10 transition"
+      >
+        <span className="text-lg leading-none">←</span>
+        <span>Volver</span>
+      </button>
+
+      {/* HEADER con imagen */}
       <div className="mb-8 rounded-3xl overflow-hidden relative">
         <div className="relative h-64 md:h-80">
           <Image
@@ -79,7 +83,11 @@ const DevProjectDetailPage: React.FC = () => {
             priority
           />
         </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+
+        {/* Degradado oscuro para el texto */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/40 to-transparent" />
+
+        {/* Texto sobre la imagen */}
         <div className="absolute bottom-6 left-6 right-6 flex flex-col gap-3">
           <span className="inline-flex items-center px-3 py-1 rounded-full bg-white/20 text-white text-sm backdrop-blur">
             Proyectos en desarrollo
@@ -88,8 +96,8 @@ const DevProjectDetailPage: React.FC = () => {
             {project.name}
           </h1>
           <div className="flex flex-wrap gap-2 text-sm">
-            <span className="px-3 py-1 rounded-full bg-white/15 text-white">{project.country}</span>
-            <span className="px-3 py-1 rounded-full bg-white/15 text-white">{project.year}</span>
+            <span className="px-3 py-1 rounded-full bg-white/18 text-white">{project.country}</span>
+            <span className="px-3 py-1 rounded-full bg-white/18 text-white">{project.year}</span>
             <span className="px-3 py-1 rounded-full bg-mintGreen text-forestGreen">
               {project.tipo}
             </span>
@@ -97,66 +105,36 @@ const DevProjectDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Contenido + formulario */}
+      {/* CONTENIDO */}
       <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr),minmax(0,1.2fr)] gap-8">
+        {/* Descripción */}
         <section>
           <h2 className="text-xl font-semibold mb-3">Descripción</h2>
           <p className="leading-relaxed text-black/80 whitespace-pre-line">{project.description}</p>
         </section>
 
-        <aside className="bg-white rounded-3xl p-5 shadow-sm border border-black/5">
-          <h2 className="text-lg font-semibold mb-2">Formulario de interés</h2>
-          <p className="text-sm text-black/70 mb-4">
-            Dejanos tus datos y el equipo de Forestblock se contactará con vos para seguir el
-            proceso de este proyecto en desarrollo.
-          </p>
+        {/* Card con CTA al formulario de contacto global */}
+        <aside className="bg-white rounded-3xl p-5 shadow-sm border border-black/5 flex flex-col justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold mb-2">¿Te interesa este proyecto?</h2>
+            <p className="text-sm text-black/70 mb-4">
+              Completá el formulario de contacto para que el equipo de Forestblock pueda enviarte
+              más información sobre <span className="font-medium">{project.name}</span>.
+            </p>
+          </div>
 
-          <form className="grid gap-3" onSubmit={handleSubmit}>
-            <input
-              type="text"
-              className="border rounded-lg px-3 py-2 text-sm"
-              placeholder="Nombre completo"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-
-            <input
-              type="email"
-              className="border rounded-lg px-3 py-2 text-sm"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-
-            <input
-              type="text"
-              className="border rounded-lg px-3 py-2 text-sm"
-              placeholder="Empresa (opcional)"
-              value={company}
-              onChange={(e) => setCompany(e.target.value)}
-            />
-
-            <textarea
-              className="border rounded-lg px-3 py-2 text-sm min-h-[100px]"
-              placeholder="Contanos brevemente qué te interesa de este proyecto"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-            />
-
-            <button
-              type="submit"
-              className="mt-1 rounded-full px-4 py-2 bg-forestGreen text-white text-sm font-medium hover:bg-forestGreen/90 transition"
-            >
-              Enviar formulario
-            </button>
-          </form>
+          <button
+            type="button"
+            onClick={() => router.push(contactUrl)}
+            className="rounded-full px-4 py-2 bg-forestGreen text-white text-sm font-medium hover:bg-forestGreen/90 transition"
+          >
+            Ir al formulario de contacto
+          </button>
 
           <button
             type="button"
             onClick={() => router.push('/new-feature')}
-            className="mt-4 text-sm text-forestGreen underline"
+            className="mt-2 text-sm text-forestGreen underline text-left"
           >
             Volver a proyectos en desarrollo
           </button>
@@ -164,6 +142,4 @@ const DevProjectDetailPage: React.FC = () => {
       </div>
     </div>
   );
-};
-
-export default DevProjectDetailPage;
+}
