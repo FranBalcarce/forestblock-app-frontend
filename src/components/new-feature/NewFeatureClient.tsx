@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import Link from 'next/link';
 import type { Project } from '@/types/project';
 import Header from '@/components/new-feature/header';
 import dynamic from 'next/dynamic';
