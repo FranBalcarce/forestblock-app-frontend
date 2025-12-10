@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { LuLayoutDashboard, LuLayoutGrid, LuPlug } from 'react-icons/lu';
-import { FaCarSide, FaRegBuilding, FaStar } from 'react-icons/fa';
+import { LuLayoutDashboard, LuLayoutGrid } from 'react-icons/lu';
+import { FaStar } from 'react-icons/fa';
 import { IoMdCart, IoLogoWhatsapp } from 'react-icons/io';
 import { MdOutlineForest } from 'react-icons/md';
 import { IoCloudyOutline, IoVideocam } from 'react-icons/io5';
