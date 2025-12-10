@@ -4,7 +4,17 @@ import React from 'react';
 import DataCard from '@/components/DataCard/DataCard';
 import { useRetirementsSummary } from '@/hooks/useRetirementsSummary';
 
-const DashboardSummary: React.FC = () => {
+type DashboardSummaryProps = {
+  totalEmissions: number;
+  count: number;
+  totalConsumptions?: number;
+};
+
+const DashboardSummary: React.FC<DashboardSummaryProps> = ({
+  totalEmissions,
+  count,
+  totalConsumptions,
+}) => {
   const { summary, loading, error } = useRetirementsSummary();
 
   if (loading) {
@@ -37,6 +47,19 @@ const DashboardSummary: React.FC = () => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+      {/* 🔹 Props nuevas que vienen de page.tsx */}
+      <DataCard
+        title="Emisiones totales"
+        value={totalEmissions.toFixed(2)}
+        unit="t CO₂e"
+        variant="primary"
+      />
+
+      <DataCard title="Cantidad" value={String(count)} />
+
+      <DataCard title="Consumos totales" value={String(totalConsumptions ?? 0)} />
+
+      {/* 🔹 Los datos originales del summary */}
       <DataCard
         title="Créditos compensados"
         value={totalTonnes.toFixed(2)}
