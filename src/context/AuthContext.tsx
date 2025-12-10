@@ -8,6 +8,13 @@ import { AuthContextType, DecodedToken } from './types';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// User tal como puede venir del backend (con distintos nombres de campo)
+type BackendUser = User & {
+  manglai_company_id?: string | null;
+  companyId?: string | null;
+  company_id?: string | null;
+};
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -18,15 +25,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
 
   const login = ({ token, user }: { token: string; user: User }) => {
+    const backendUser = user as BackendUser;
+
     // 🔹 Normalizamos el campo de compañía para que SIEMPRE exista manglaiCompanyId
     const normalizedUser: User = {
-      ...user,
-      // probamos con varios nombres posibles que pueda mandar el backend
+      ...backendUser,
       manglaiCompanyId:
-        (user as any).manglaiCompanyId ??
-        (user as any).manglai_company_id ??
-        (user as any).companyId ??
-        (user as any).company_id ??
+        backendUser.manglaiCompanyId ??
+        backendUser.manglai_company_id ??
+        backendUser.companyId ??
+        backendUser.company_id ??
         null,
     };
 
@@ -71,7 +79,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return;
       }
 
-      const savedUser = JSON.parse(localStorage.getItem('forestblockUser') || '{}');
+      const savedUser = JSON.parse(localStorage.getItem('forestblockUser') || '{}') as User;
+
       setUser(savedUser);
       setIsAuthenticated(true);
     } catch (error) {
