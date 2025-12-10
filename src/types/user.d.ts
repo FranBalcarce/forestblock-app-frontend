@@ -14,4 +14,5 @@ export interface User {
   email: string;
   walletAddress?: string;
   profile?: Profile;
+  manglaiCompanyId?: string | null;
 }
