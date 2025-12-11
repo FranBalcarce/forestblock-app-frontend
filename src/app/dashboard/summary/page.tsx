@@ -8,18 +8,22 @@ const DashboardSummary: React.FC = () => {
   const { summary, loading, error } = useRetirementsSummary();
 
   // ---------------------------
-  // 🔹 Loading y errores
+  // Loading / error
   // ---------------------------
   if (loading) {
-    return <div className="text-sm text-gray-500">Cargando resumen...</div>;
+    return (
+      <div className="w-full flex justify-center mt-12 text-sm text-gray-500">
+        Cargando resumen...
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="text-sm text-red-500">{error}</div>;
+    return <div className="w-full flex justify-center mt-12 text-sm text-red-500">{error}</div>;
   }
 
   // ---------------------------
-  // 🔹 Valores seguros
+  // Datos seguros
   // ---------------------------
   const totalTonnes = summary?.totalTonnesRetired ?? 0;
   const totalOrders = summary?.totalOrders ?? 0;
@@ -32,27 +36,31 @@ const DashboardSummary: React.FC = () => {
       })
     : '—';
 
+  // Para el mini-gráfico (evitamos división por 0)
+  const maxValue = Math.max(totalTonnes, totalOrders, 1);
+  const tonnesHeight = (totalTonnes / maxValue) * 100;
+  const ordersHeight = (totalOrders / maxValue) * 100;
+
   return (
-    <div className="w-full px-6 mt-10">
-      {/* Contenedor general estilo tarjeta flotante */}
-      <div className="bg-green-50/60 backdrop-blur-md shadow-md rounded-2xl p-8 border border-green-100 max-w-5xl mx-auto">
-        {/* Encabezado */}
-        <div className="mb-8 text-center">
-          <h2 className="text-xs font-semibold tracking-wider text-green-700">
-            RESUMEN DE IMPACTO
+    <div className="w-full px-4 md:px-10 mt-12 mb-10 flex justify-center">
+      {/* CONTENEDOR GRANDE FLOTANTE */}
+      <div className="bg-emerald-50/80 backdrop-blur-md shadow-lg rounded-3xl p-8 md:p-12 border border-emerald-100 max-w-6xl w-full">
+        {/* HEADER */}
+        <div className="mb-10 text-center">
+          <h2 className="text-xs font-semibold tracking-[0.18em] text-emerald-700 uppercase">
+            Resumen de impacto
           </h2>
-          <h1 className="text-2xl font-bold text-green-900 mt-1">
+          <h1 className="text-2xl md:text-3xl font-bold text-forestGreen mt-2">
             Tu impacto climático en un vistazo
           </h1>
-          <p className="text-sm text-gray-600 mt-2 max-w-xl mx-auto">
+          <p className="text-sm md:text-base text-gray-600 mt-3 max-w-2xl mx-auto">
             Acá podés ver cuántas toneladas de CO₂e compensaste, cuántas órdenes de retiro generaste
             y cuándo fue tu último retiro.
           </p>
         </div>
 
-        {/* Grid con tarjetas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-          {/* Créditos compensados */}
+        {/* CARDS PRINCIPALES */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
           <DataCard
             title="Créditos compensados"
             value={totalTonnes.toFixed(2)}
@@ -60,17 +68,62 @@ const DashboardSummary: React.FC = () => {
             variant="primary"
           />
 
-          {/* Órdenes de retiro */}
           <DataCard title="Órdenes de retiro" value={String(totalOrders)} />
 
-          {/* Último retiro */}
           <DataCard title="Último retiro" value={formattedDate} />
         </div>
 
-        {/* Indicador de actualización */}
-        <div className="flex justify-end mt-6">
-          <span className="text-xs px-3 py-1 rounded-full bg-green-100 text-green-700 flex items-center gap-2">
-            ● Datos actualizados automáticamente
+        {/* MINI GRÁFICO + TEXTO EXPLICATIVO */}
+        <div className="mt-10 grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
+          {/* Gráfico de barras simple */}
+          <div className="lg:col-span-2">
+            <h3 className="text-sm font-semibold text-forestGreen mb-3">Comparación rápida</h3>
+            <div className="h-40 rounded-2xl bg-white/80 border border-emerald-100 px-6 pb-4 pt-6 flex items-end gap-8 shadow-sm">
+              {/* Eje Y (línea tenue) */}
+              <div className="absolute h-40 -mt-6 border-l border-gray-100" />
+
+              {/* Barra Créditos */}
+              <div className="flex flex-col items-center justify-end gap-2 flex-1">
+                <div
+                  className="w-10 rounded-t-2xl bg-emerald-500/90 shadow-md transition-all"
+                  style={{ height: `${Math.max(tonnesHeight, 8)}%` }} // mínimo 8% para que se vea algo
+                />
+                <span className="text-xs font-medium text-forestGreen">Créditos</span>
+                <span className="text-[11px] text-gray-500">{totalTonnes.toFixed(2)} t CO₂e</span>
+              </div>
+
+              {/* Barra Órdenes */}
+              <div className="flex flex-col items-center justify-end gap-2 flex-1">
+                <div
+                  className="w-10 rounded-t-2xl bg-emerald-300 shadow-md transition-all"
+                  style={{ height: `${Math.max(ordersHeight, 8)}%` }}
+                />
+                <span className="text-xs font-medium text-forestGreen">Órdenes</span>
+                <span className="text-[11px] text-gray-500">{totalOrders}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Texto al lado del gráfico */}
+          <div className="text-sm text-gray-700">
+            <p className="font-medium text-forestGreen mb-2">Cómo leer este gráfico</p>
+            <p className="mb-2">
+              Cada barra representa el total de créditos compensados y la cantidad de órdenes de
+              retiro generadas. Cuando empieces a compensar tu huella, vas a ver cómo estas barras
+              crecen con tu impacto positivo.
+            </p>
+            <p className="text-xs text-gray-500">
+              Este gráfico es un resumen visual rápido; los valores exactos siempre están
+              disponibles en las tarjetas de arriba.
+            </p>
+          </div>
+        </div>
+
+        {/* INDICADOR DE ACTUALIZACIÓN */}
+        <div className="flex justify-end mt-8">
+          <span className="text-[11px] px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            Datos actualizados automáticamente
           </span>
         </div>
       </div>
