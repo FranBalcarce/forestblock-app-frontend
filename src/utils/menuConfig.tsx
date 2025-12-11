@@ -26,33 +26,13 @@ export function useMenuItems(): MenuItem[] {
         queryKeys: [],
         children: [
           {
-            href: d('/dashboard/summary'),
+            // 👇 ahora apunta directo a la ruta estática
+            href: '/dashboard/summary',
             label: 'Resumen',
             icon: <LuLayoutGrid size={20} />,
             nestedRoutes: [],
             queryKeys: [],
           },
-          // {
-          //   href: d('/dashboard/buildings'),
-          //   label: 'Edificios',
-          //   icon: <FaRegBuilding size={20} />,
-          //   nestedRoutes: [],
-          //   queryKeys: [],
-          // },
-          // {
-          //   href: d('/dashboard/vehicles'),
-          //   label: 'Vehículos',
-          //   icon: <FaCarSide size={20} />,
-          //   nestedRoutes: [],
-          //   queryKeys: [],
-          // },
-          // {
-          //   href: d('/dashboard/consumptions'),
-          //   label: 'Consumos',
-          //   icon: <LuPlug size={20} />,
-          //   nestedRoutes: [],
-          //   queryKeys: [],
-          // },
         ],
       },
       {
@@ -87,13 +67,6 @@ export function useMenuItems(): MenuItem[] {
         nestedRoutes: ['/new-feature/preorder'],
         queryKeys: [],
       },
-      // {
-      //   href: '/new-feature/future',
-      //   label: 'Proyectos futuros',
-      //   icon: <FaRocket size={20} />,
-      //   nestedRoutes: ['/new-feature/preorder'],
-      //   queryKeys: [],
-      // },
 
       // -------- INFO (6..)
       {
