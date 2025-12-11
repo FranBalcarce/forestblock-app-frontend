@@ -37,18 +37,13 @@ const DashboardSummaryPage: React.FC = () => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-      {/* Si más adelante querés mostrar más métricas, las podés calcular acá 
-         a partir de summary y agregarlas como más DataCard */}
-
       <DataCard
         title="Créditos compensados"
         value={totalTonnes.toFixed(2)}
         unit="t CO₂e"
         variant="primary"
       />
-
       <DataCard title="Órdenes de retiro" value={String(totalOrders)} unit="" />
-
       <DataCard title="Último retiro" value={formattedDate} unit="" />
     </div>
   );
