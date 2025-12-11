@@ -1,67 +1,30 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import DataCard from '@/components/DataCard/DataCard';
 import { useRetirementsSummary } from '@/hooks/useRetirementsSummary';
 
-const DashboardSummaryPage: React.FC = () => {
+const DashboardSummary: React.FC = () => {
   const { summary, loading, error } = useRetirementsSummary();
 
+  // ---------------------------
+  // 🔹 Loading y errores
+  // ---------------------------
   if (loading) {
-    return (
-      <div className="min-h-[calc(100vh-120px)] flex items-center">
-        <div className="w-full max-w-5xl mx-auto rounded-2xl border border-gray-100 bg-white/60 p-6 text-sm text-gray-500 shadow-sm">
-          Cargando el resumen de tu impacto...
-        </div>
-      </div>
-    );
+    return <div className="text-sm text-gray-500">Cargando resumen...</div>;
   }
 
   if (error) {
-    return (
-      <div className="min-h-[calc(100vh-120px)] flex items-center">
-        <div className="w-full max-w-5xl mx-auto rounded-2xl border border-red-100 bg-red-50/80 p-6 text-sm text-red-600 shadow-sm">
-          Ocurrió un error al cargar tu resumen. Por favor volvé a intentar en unos minutos.
-        </div>
-      </div>
-    );
+    return <div className="text-sm text-red-500">{error}</div>;
   }
 
-  // ---- EMPTY STATE ----
-  if (!summary) {
-    return (
-      <div className="min-h-[calc(100vh-120px)] flex items-center">
-        <div className="w-full max-w-5xl mx-auto rounded-3xl border border-dashed border-emerald-200 bg-emerald-50/60 p-8 md:p-10 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.18em] uppercase text-emerald-600">
-              Resumen de impacto
-            </p>
-            <h1 className="mt-2 text-2xl md:text-3xl font-semibold text-forestGreen">
-              Todavía no tenés retiros registrados
-            </h1>
-            <p className="mt-3 text-sm md:text-base text-gray-600 max-w-xl">
-              Cuando compres y retires créditos de carbono, vas a ver acá el resumen de tu impacto:
-              toneladas compensadas, órdenes de retiro y la fecha de tu último movimiento.
-            </p>
-          </div>
+  // ---------------------------
+  // 🔹 Valores seguros
+  // ---------------------------
+  const totalTonnes = summary?.totalTonnesRetired ?? 0;
+  const totalOrders = summary?.totalOrders ?? 0;
 
-          <Link
-            href="/marketplace"
-            className="inline-flex items-center justify-center rounded-full bg-mintGreen px-6 py-3 text-sm font-medium text-forestGreen shadow-sm hover:shadow-md transition-shadow"
-          >
-            Ir al marketplace
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  // ---- SUMMARY CON DATOS ----
-  const totalTonnes = summary.totalTonnesRetired ?? 0;
-  const totalOrders = summary.totalOrders ?? 0;
-
-  const formattedDate = summary.lastRetirementDate
+  const formattedDate = summary?.lastRetirementDate
     ? new Date(summary.lastRetirementDate).toLocaleDateString('es-AR', {
         day: '2-digit',
         month: '2-digit',
@@ -70,31 +33,26 @@ const DashboardSummaryPage: React.FC = () => {
     : '—';
 
   return (
-    <div className="min-h-[calc(100vh-120px)] flex items-center">
-      <section className="w-full max-w-5xl mx-auto space-y-8">
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.18em] uppercase text-emerald-600">
-              Resumen de impacto
-            </p>
-            <h1 className="mt-2 text-2xl md:text-3xl font-semibold text-forestGreen">
-              Tu impacto climático en un vistazo
-            </h1>
-            <p className="mt-2 text-sm text-gray-600 max-w-xl">
-              Acá podés ver cuántas toneladas de CO₂e compensaste, cuántas órdenes de retiro
-              generaste y cuándo fue tu último retiro.
-            </p>
-          </div>
-
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50/80 px-4 py-2 text-xs font-medium text-emerald-700">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            Datos actualizados automáticamente
-          </div>
+    <div className="w-full px-6 mt-10">
+      {/* Contenedor general estilo tarjeta flotante */}
+      <div className="bg-green-50/60 backdrop-blur-md shadow-md rounded-2xl p-8 border border-green-100 max-w-5xl mx-auto">
+        {/* Encabezado */}
+        <div className="mb-8 text-center">
+          <h2 className="text-xs font-semibold tracking-wider text-green-700">
+            RESUMEN DE IMPACTO
+          </h2>
+          <h1 className="text-2xl font-bold text-green-900 mt-1">
+            Tu impacto climático en un vistazo
+          </h1>
+          <p className="text-sm text-gray-600 mt-2 max-w-xl mx-auto">
+            Acá podés ver cuántas toneladas de CO₂e compensaste, cuántas órdenes de retiro generaste
+            y cuándo fue tu último retiro.
+          </p>
         </div>
 
-        {/* CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Grid con tarjetas */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+          {/* Créditos compensados */}
           <DataCard
             title="Créditos compensados"
             value={totalTonnes.toFixed(2)}
@@ -102,16 +60,25 @@ const DashboardSummaryPage: React.FC = () => {
             variant="primary"
           />
 
-          <DataCard title="Órdenes de retiro" value={String(totalOrders)} unit="" />
+          {/* Órdenes de retiro */}
+          <DataCard title="Órdenes de retiro" value={String(totalOrders)} />
 
-          <DataCard title="Último retiro" value={formattedDate} unit="" />
+          {/* Último retiro */}
+          <DataCard title="Último retiro" value={formattedDate} />
         </div>
-      </section>
+
+        {/* Indicador de actualización */}
+        <div className="flex justify-end mt-6">
+          <span className="text-xs px-3 py-1 rounded-full bg-green-100 text-green-700 flex items-center gap-2">
+            ● Datos actualizados automáticamente
+          </span>
+        </div>
+      </div>
     </div>
   );
 };
 
-export default DashboardSummaryPage;
+export default DashboardSummary;
 
 // 'use client';
 
