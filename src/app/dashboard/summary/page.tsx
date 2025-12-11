@@ -10,43 +10,49 @@ const DashboardSummaryPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-gray-100 bg-white/60 p-6 text-sm text-gray-500 shadow-sm">
-        Cargando el resumen de tu impacto...
+      <div className="min-h-[calc(100vh-120px)] flex items-center">
+        <div className="w-full max-w-5xl mx-auto rounded-2xl border border-gray-100 bg-white/60 p-6 text-sm text-gray-500 shadow-sm">
+          Cargando el resumen de tu impacto...
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-red-100 bg-red-50/80 p-6 text-sm text-red-600 shadow-sm">
-        Ocurrió un error al cargar tu resumen. Por favor volvé a intentar en unos minutos.
+      <div className="min-h-[calc(100vh-120px)] flex items-center">
+        <div className="w-full max-w-5xl mx-auto rounded-2xl border border-red-100 bg-red-50/80 p-6 text-sm text-red-600 shadow-sm">
+          Ocurrió un error al cargar tu resumen. Por favor volvé a intentar en unos minutos.
+        </div>
       </div>
     );
   }
 
-  // ---- EMPTY STATE: todavía no retiró créditos ----
+  // ---- EMPTY STATE ----
   if (!summary) {
     return (
-      <div className="rounded-3xl border border-dashed border-emerald-200 bg-emerald-50/60 p-8 md:p-10 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        <div>
-          <p className="text-xs font-semibold tracking-[0.18em] uppercase text-emerald-600">
-            Resumen de impacto
-          </p>
-          <h1 className="mt-2 text-2xl md:text-3xl font-semibold text-forestGreen">
-            Todavía no tenés retiros registrados
-          </h1>
-          <p className="mt-3 text-sm md:text-base text-gray-600 max-w-xl">
-            Cuando compres y retires créditos de carbono, vas a ver acá el resumen de tu impacto:
-            toneladas compensadas, órdenes de retiro y la fecha de tu último movimiento.
-          </p>
-        </div>
+      <div className="min-h-[calc(100vh-120px)] flex items-center">
+        <div className="w-full max-w-5xl mx-auto rounded-3xl border border-dashed border-emerald-200 bg-emerald-50/60 p-8 md:p-10 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.18em] uppercase text-emerald-600">
+              Resumen de impacto
+            </p>
+            <h1 className="mt-2 text-2xl md:text-3xl font-semibold text-forestGreen">
+              Todavía no tenés retiros registrados
+            </h1>
+            <p className="mt-3 text-sm md:text-base text-gray-600 max-w-xl">
+              Cuando compres y retires créditos de carbono, vas a ver acá el resumen de tu impacto:
+              toneladas compensadas, órdenes de retiro y la fecha de tu último movimiento.
+            </p>
+          </div>
 
-        <Link
-          href="/marketplace"
-          className="inline-flex items-center justify-center rounded-full bg-mintGreen px-6 py-3 text-sm font-medium text-forestGreen shadow-sm hover:shadow-md transition-shadow"
-        >
-          Ir al marketplace
-        </Link>
+          <Link
+            href="/marketplace"
+            className="inline-flex items-center justify-center rounded-full bg-mintGreen px-6 py-3 text-sm font-medium text-forestGreen shadow-sm hover:shadow-md transition-shadow"
+          >
+            Ir al marketplace
+          </Link>
+        </div>
       </div>
     );
   }
@@ -64,42 +70,44 @@ const DashboardSummaryPage: React.FC = () => {
     : '—';
 
   return (
-    <section className="space-y-8">
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold tracking-[0.18em] uppercase text-emerald-600">
-            Resumen de impacto
-          </p>
-          <h1 className="mt-2 text-2xl md:text-3xl font-semibold text-forestGreen">
-            Tu impacto climático en un vistazo
-          </h1>
-          <p className="mt-2 text-sm text-gray-600 max-w-xl">
-            Acá podés ver cuántas toneladas de CO₂e compensaste, cuántas órdenes de retiro generaste
-            y cuándo fue tu último retiro.
-          </p>
+    <div className="min-h-[calc(100vh-120px)] flex items-center">
+      <section className="w-full max-w-5xl mx-auto space-y-8">
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.18em] uppercase text-emerald-600">
+              Resumen de impacto
+            </p>
+            <h1 className="mt-2 text-2xl md:text-3xl font-semibold text-forestGreen">
+              Tu impacto climático en un vistazo
+            </h1>
+            <p className="mt-2 text-sm text-gray-600 max-w-xl">
+              Acá podés ver cuántas toneladas de CO₂e compensaste, cuántas órdenes de retiro
+              generaste y cuándo fue tu último retiro.
+            </p>
+          </div>
+
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50/80 px-4 py-2 text-xs font-medium text-emerald-700">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            Datos actualizados automáticamente
+          </div>
         </div>
 
-        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50/80 px-4 py-2 text-xs font-medium text-emerald-700">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          Datos actualizados automáticamente
+        {/* CARDS */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <DataCard
+            title="Créditos compensados"
+            value={totalTonnes.toFixed(2)}
+            unit="t CO₂e"
+            variant="primary"
+          />
+
+          <DataCard title="Órdenes de retiro" value={String(totalOrders)} unit="" />
+
+          <DataCard title="Último retiro" value={formattedDate} unit="" />
         </div>
-      </div>
-
-      {/* CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <DataCard
-          title="Créditos compensados"
-          value={totalTonnes.toFixed(2)}
-          unit="t CO₂e"
-          variant="primary"
-        />
-
-        <DataCard title="Órdenes de retiro" value={String(totalOrders)} unit="" />
-
-        <DataCard title="Último retiro" value={formattedDate} unit="" />
-      </div>
-    </section>
+      </section>
+    </div>
   );
 };
 
