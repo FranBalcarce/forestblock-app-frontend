@@ -3,22 +3,10 @@ import MarketplaceByIdClient from '@/components/Marketplace/MarketplaceByIdClien
 
 export const dynamic = 'force-dynamic';
 
-type Props = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function MarketplaceByIdPage({ params }: Props) {
-  const { id } = await params;
-
+export default function Page({ params }: { params: { id: string } }) {
   return (
-    <Suspense
-      fallback={
-        <div className="max-w-6xl mx-auto px-4 py-10">
-          <p className="text-black/70">Cargando proyecto...</p>
-        </div>
-      }
-    >
-      <MarketplaceByIdClient id={id} />
+    <Suspense fallback={null}>
+      <MarketplaceByIdClient id={params.id} />
     </Suspense>
   );
 }
