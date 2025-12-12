@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+// src/hooks/useMarketplace.ts
+import { useEffect, useMemo, useState } from 'react';
 import { Price, RetireParams, UseMarketplace } from '@/types/marketplace';
 import { Project } from '@/types/project';
 import { useRouter } from 'next/navigation';
@@ -9,38 +10,61 @@ import qs from 'qs';
 import { useRetire } from '../context/RetireContext';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
-type ProjectWithDescriptions = Project & {
-  description?: string | null;
-  short_description?: string | null;
-  long_description?: string | null;
-
-  // por si el backend lo normaliza con camelCase
-  shortDescription?: string | null;
-  longDescription?: string | null;
+/**
+ * Tipos “compat” para Carbonmark v18 sin usar `any`.
+ * Solo definimos lo mínimo que necesitamos.
+ */
+type CarbonmarkProjectV18 = Partial<Project> & {
+  long_description?: string;
+  short_description?: string;
+  description?: string;
 };
 
-const normalizeProject = (proj: ProjectWithDescriptions): ProjectWithDescriptions => {
-  // 1) Precio (ya lo venías haciendo)
-  let price = proj.price;
-  const p = parseFloat(price);
-  if (!isNaN(p)) price = (p * PRICE_MULTIPLIER).toString();
+type CarbonmarkListResponse<T> =
+  | T[]
+  | {
+      items?: T[];
+      data?: T[];
+      results?: T[];
+    };
 
-  // 2) Descripción: fallback en cascada (v18 suele traer varias)
-  const normalizedDescription =
-    proj.short_description ??
-    proj.shortDescription ??
-    proj.description ??
-    proj.long_description ??
-    proj.longDescription ??
-    '';
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
 
+function extractList<T>(raw: unknown): T[] {
+  if (Array.isArray(raw)) return raw as T[];
+
+  if (isObject(raw)) {
+    const items = raw.items;
+    if (Array.isArray(items)) return items as T[];
+
+    const data = raw.data;
+    if (Array.isArray(data)) return data as T[];
+
+    const results = raw.results;
+    if (Array.isArray(results)) return results as T[];
+  }
+
+  return [];
+}
+
+function normalizeProject(proj: CarbonmarkProjectV18): Project {
+  const priceNumber = typeof proj.price === 'string' ? Number.parseFloat(proj.price) : NaN;
+  const price = Number.isFinite(priceNumber)
+    ? (priceNumber * PRICE_MULTIPLIER).toString()
+    : proj.price ?? '0';
+
+  const description = proj.description ?? proj.long_description ?? proj.short_description ?? '';
+
+  // OJO: esto asume que tu tipo Project acepta description.
+  // Si no, agregalo en el type.
   return {
-    ...proj,
+    ...(proj as Project),
     price,
-    // Si tu UI usa proj.description, garantizamos que tenga algo
-    description: normalizedDescription,
+    description,
   };
-};
+}
 
 const useMarketplace = (id?: string): UseMarketplace => {
   const [isPricesLoading, setIsPricesLoading] = useState<boolean>(true);
@@ -56,10 +80,10 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [sortBy, setSortBy] = useState<string>('price-desc');
   const [loading, setLoading] = useState<boolean>(true);
   const [project, setProject] = useState<Project | null>(null);
-
   const { isAuthenticated, setRedirectUrl } = useAuth();
   const { openModal } = useModal();
   const { setTotalSupply } = useRetire();
+
   const router = useRouter();
 
   const handleRetire = ({ id, index, priceParam, selectedVintage }: RetireParams) => {
@@ -68,7 +92,12 @@ const useMarketplace = (id?: string): UseMarketplace => {
     const methodologyName = project?.methodologies?.[0]?.name || 'Sin metodología';
     const encodedMethodologyName = encodeURIComponent(methodologyName);
 
-    const url = `/retireCheckout?index=${index}&projectIds=${id}&priceParam=${priceParam}&methodologyName=${encodedMethodologyName}&selectedVintage=${selectedVintage}`;
+    const url =
+      `/retireCheckout?index=${index}` +
+      `&projectIds=${id}` +
+      `&priceParam=${priceParam}` +
+      `&methodologyName=${encodedMethodologyName}` +
+      `&selectedVintage=${selectedVintage}`;
 
     if (!isAuthenticated) {
       setRedirectUrl(url);
@@ -88,22 +117,14 @@ const useMarketplace = (id?: string): UseMarketplace => {
     const fetchProject = async () => {
       try {
         const response = await axiosPublicInstance.get(`/carbon/carbonProjects/${id}`);
-        const data = response.data as ProjectWithDescriptions;
 
-        // 👇 Log MUY útil para ver si el backend trae description o no
-        console.log('🟢 Project detail raw:', data);
-        console.log('🟡 Desc fields:', {
-          description: data?.description,
-          short_description: (data as any)?.short_description,
-          long_description: (data as any)?.long_description,
-          shortDescription: (data as any)?.shortDescription,
-          longDescription: (data as any)?.longDescription,
-        });
+        const raw = response.data as unknown;
+        const data = isObject(raw) ? (raw as CarbonmarkProjectV18) : ({} as CarbonmarkProjectV18);
 
         const normalized = normalizeProject(data);
 
-        setTotalSupply((normalized as any)?.stats?.totalSupply);
-        setProject(normalized as unknown as Project);
+        setTotalSupply((data as Project)?.stats?.totalSupply);
+        setProject(normalized);
       } catch (error) {
         console.error('Error fetching project details:', error);
       }
@@ -118,6 +139,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
   useEffect(() => {
     const fetchProjects = async () => {
       setLoading(true);
+
       try {
         const response = await axiosPublicInstance.get('/carbon/carbonProjects', {
           params: {
@@ -127,39 +149,22 @@ const useMarketplace = (id?: string): UseMarketplace => {
           paramsSerializer: (params) => qs.stringify(params, { arrayFormat: 'repeat' }),
         });
 
-        const raw = response.data;
-        const list: ProjectWithDescriptions[] = Array.isArray(raw)
-          ? raw
-          : raw?.items
-          ? raw.items
-          : [];
+        const list = extractList<CarbonmarkProjectV18>(response.data as unknown);
 
-        if (!Array.isArray(list)) {
-          console.error('❌ API devolvió formato inesperado:', raw);
-          setProjects([]);
-          setFilteredProjects([]);
-          return;
-        }
-
-        // 👇 Log para chequear si llegan campos de descripción en el listado
-        console.log('🟢 Projects list raw sample:', list?.[0]);
-        console.log('🟡 Desc fields sample:', {
-          description: list?.[0]?.description,
-          short_description: (list?.[0] as any)?.short_description,
-          long_description: (list?.[0] as any)?.long_description,
-        });
-
-        const updated = list.map((proj) => normalizeProject(proj));
+        const updated = list.map(normalizeProject);
 
         const uniqueCategories = Array.from(
           new Set(updated.flatMap((p) => p.methodologies?.map((m) => m.category) || []))
         );
 
-        setProjects(updated as unknown as Project[]);
-        setFilteredProjects(updated as unknown as Project[]);
+        setProjects(updated);
+        setFilteredProjects(updated);
         setAvailableCategories(uniqueCategories);
       } catch (error) {
         console.error('Error fetching projects:', error);
+        setProjects([]);
+        setFilteredProjects([]);
+        setAvailableCategories([]);
       } finally {
         setLoading(false);
       }
@@ -184,8 +189,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
           paramsSerializer: (params) => qs.stringify(params, { arrayFormat: 'repeat' }),
         });
 
-        const raw = response.data;
-        const list = Array.isArray(raw) ? raw : raw.items || [];
+        const list = extractList<Price>(response.data as unknown);
 
         const updated = list.map((priceItem: Price) => ({
           ...priceItem,
@@ -208,30 +212,36 @@ const useMarketplace = (id?: string): UseMarketplace => {
   useEffect(() => {
     let updated = [...projects];
 
-    if (selectedCountries.length)
+    if (selectedCountries.length) {
       updated = updated.filter((p) => selectedCountries.includes(p.country));
+    }
 
-    if (selectedCategories.length)
+    if (selectedCategories.length) {
       updated = updated.filter((p) =>
         p.methodologies?.some((m) => selectedCategories.includes(m.category))
       );
+    }
 
-    if (selectedVintages.length)
-      updated = updated.filter((p) => p.vintages.some((v) => selectedVintages.includes(v)));
+    if (selectedVintages.length) {
+      updated = updated.filter((p) => p.vintages?.some((v) => selectedVintages.includes(v)));
+    }
 
-    if (selectedUNSDG.length)
+    if (selectedUNSDG.length) {
       updated = updated.filter((p) =>
         p.sustainableDevelopmentGoals?.some((sdg) => selectedUNSDG.includes(sdg))
       );
+    }
 
-    if (searchTerm)
+    if (searchTerm) {
       updated = updated.filter((p) => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    }
 
     if (sortBy === 'price-asc') updated.sort((a, b) => +a.price - +b.price);
     if (sortBy === 'price-desc') updated.sort((a, b) => +b.price - +a.price);
     if (sortBy === 'name') updated.sort((a, b) => a.name.localeCompare(b.name));
-    if (sortBy === 'recently-update')
+    if (sortBy === 'recently-update') {
       updated.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    }
 
     setFilteredProjects(updated);
   }, [
