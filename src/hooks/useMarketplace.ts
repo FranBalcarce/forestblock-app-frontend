@@ -1,5 +1,5 @@
 // src/hooks/useMarketplace.ts
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Price, RetireParams, UseMarketplace } from '@/types/marketplace';
 import { Project } from '@/types/project';
 import { useRouter } from 'next/navigation';
@@ -19,14 +19,6 @@ type CarbonmarkProjectV18 = Partial<Project> & {
   short_description?: string;
   description?: string;
 };
-
-type CarbonmarkListResponse<T> =
-  | T[]
-  | {
-      items?: T[];
-      data?: T[];
-      results?: T[];
-    };
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
