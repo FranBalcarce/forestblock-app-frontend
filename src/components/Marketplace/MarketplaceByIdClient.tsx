@@ -1,11 +1,15 @@
 'use client';
 
-import React from 'react';
-import { useSearchParams } from 'next/navigation';
+import React, { useEffect } from 'react';
 
-const MarketplaceByIdClient: React.FC = () => {
-  const searchParams = useSearchParams();
-  const id = searchParams.get('id');
+type Props = {
+  id: string;
+};
+
+const MarketplaceByIdClient: React.FC<Props> = ({ id }) => {
+  useEffect(() => {
+    console.log('✅ MarketplaceByIdClient id:', id);
+  }, [id]);
 
   return <div>ID del proyecto: {id}</div>;
 };
