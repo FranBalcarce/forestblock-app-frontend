@@ -9,6 +9,39 @@ import qs from 'qs';
 import { useRetire } from '../context/RetireContext';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
+type ProjectWithDescriptions = Project & {
+  description?: string | null;
+  short_description?: string | null;
+  long_description?: string | null;
+
+  // por si el backend lo normaliza con camelCase
+  shortDescription?: string | null;
+  longDescription?: string | null;
+};
+
+const normalizeProject = (proj: ProjectWithDescriptions): ProjectWithDescriptions => {
+  // 1) Precio (ya lo venías haciendo)
+  let price = proj.price;
+  const p = parseFloat(price);
+  if (!isNaN(p)) price = (p * PRICE_MULTIPLIER).toString();
+
+  // 2) Descripción: fallback en cascada (v18 suele traer varias)
+  const normalizedDescription =
+    proj.short_description ??
+    proj.shortDescription ??
+    proj.description ??
+    proj.long_description ??
+    proj.longDescription ??
+    '';
+
+  return {
+    ...proj,
+    price,
+    // Si tu UI usa proj.description, garantizamos que tenga algo
+    description: normalizedDescription,
+  };
+};
+
 const useMarketplace = (id?: string): UseMarketplace => {
   const [isPricesLoading, setIsPricesLoading] = useState<boolean>(true);
   const [prices, setPrices] = useState<Price[]>([]);
@@ -23,18 +56,18 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [sortBy, setSortBy] = useState<string>('price-desc');
   const [loading, setLoading] = useState<boolean>(true);
   const [project, setProject] = useState<Project | null>(null);
+
   const { isAuthenticated, setRedirectUrl } = useAuth();
   const { openModal } = useModal();
   const { setTotalSupply } = useRetire();
-
   const router = useRouter();
 
   const handleRetire = ({ id, index, priceParam, selectedVintage }: RetireParams) => {
     if (!id) return;
 
     const methodologyName = project?.methodologies?.[0]?.name || 'Sin metodología';
-
     const encodedMethodologyName = encodeURIComponent(methodologyName);
+
     const url = `/retireCheckout?index=${index}&projectIds=${id}&priceParam=${priceParam}&methodologyName=${encodedMethodologyName}&selectedVintage=${selectedVintage}`;
 
     if (!isAuthenticated) {
@@ -47,7 +80,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
   };
 
   // -------------------------------------------------------------
-  // 🔥 1️⃣ GET PROJECT BY ID
+  // 1) GET PROJECT BY ID
   // -------------------------------------------------------------
   useEffect(() => {
     if (!id) return;
@@ -55,29 +88,32 @@ const useMarketplace = (id?: string): UseMarketplace => {
     const fetchProject = async () => {
       try {
         const response = await axiosPublicInstance.get(`/carbon/carbonProjects/${id}`);
+        const data = response.data as ProjectWithDescriptions;
 
-        let data = response.data;
+        // 👇 Log MUY útil para ver si el backend trae description o no
+        console.log('🟢 Project detail raw:', data);
+        console.log('🟡 Desc fields:', {
+          description: data?.description,
+          short_description: (data as any)?.short_description,
+          long_description: (data as any)?.long_description,
+          shortDescription: (data as any)?.shortDescription,
+          longDescription: (data as any)?.longDescription,
+        });
 
-        // Ajustamos precio
-        if (data && typeof data.price === 'string') {
-          const p = parseFloat(data.price);
-          if (!isNaN(p)) {
-            data = { ...data, price: (p * PRICE_MULTIPLIER).toString() };
-          }
-        }
+        const normalized = normalizeProject(data);
 
-        setTotalSupply(data?.stats?.totalSupply);
-        setProject(data);
+        setTotalSupply((normalized as any)?.stats?.totalSupply);
+        setProject(normalized as unknown as Project);
       } catch (error) {
         console.error('Error fetching project details:', error);
       }
     };
 
     fetchProject();
-  }, [id]);
+  }, [id, setTotalSupply]);
 
   // -------------------------------------------------------------
-  // 🔥 2️⃣ GET ALL PROJECTS (FIX FINAL ACÁ)
+  // 2) GET ALL PROJECTS
   // -------------------------------------------------------------
   useEffect(() => {
     const fetchProjects = async () => {
@@ -91,9 +127,12 @@ const useMarketplace = (id?: string): UseMarketplace => {
           paramsSerializer: (params) => qs.stringify(params, { arrayFormat: 'repeat' }),
         });
 
-        // 🔥 Fix universal: siempre saco un array
         const raw = response.data;
-        const list: Project[] = Array.isArray(raw) ? raw : raw?.items ? raw.items : [];
+        const list: ProjectWithDescriptions[] = Array.isArray(raw)
+          ? raw
+          : raw?.items
+          ? raw.items
+          : [];
 
         if (!Array.isArray(list)) {
           console.error('❌ API devolvió formato inesperado:', raw);
@@ -102,20 +141,22 @@ const useMarketplace = (id?: string): UseMarketplace => {
           return;
         }
 
-        // Ajusto precios
-        const updated = list.map((proj) => {
-          const p = parseFloat(proj.price);
-          if (isNaN(p)) return proj;
-          return { ...proj, price: (p * PRICE_MULTIPLIER).toString() };
+        // 👇 Log para chequear si llegan campos de descripción en el listado
+        console.log('🟢 Projects list raw sample:', list?.[0]);
+        console.log('🟡 Desc fields sample:', {
+          description: list?.[0]?.description,
+          short_description: (list?.[0] as any)?.short_description,
+          long_description: (list?.[0] as any)?.long_description,
         });
 
-        // Extraigo categorías
+        const updated = list.map((proj) => normalizeProject(proj));
+
         const uniqueCategories = Array.from(
           new Set(updated.flatMap((p) => p.methodologies?.map((m) => m.category) || []))
         );
 
-        setProjects(updated);
-        setFilteredProjects(updated);
+        setProjects(updated as unknown as Project[]);
+        setFilteredProjects(updated as unknown as Project[]);
         setAvailableCategories(uniqueCategories);
       } catch (error) {
         console.error('Error fetching projects:', error);
@@ -128,7 +169,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
   }, []);
 
   // -------------------------------------------------------------
-  // 🔥 3️⃣ GET PRICES
+  // 3) GET PRICES
   // -------------------------------------------------------------
   useEffect(() => {
     const fetchPrices = async () => {
@@ -162,7 +203,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
   }, [projects]);
 
   // -------------------------------------------------------------
-  // 🔥 4️⃣ FILTERS + SORTING
+  // 4) FILTERS + SORTING
   // -------------------------------------------------------------
   useEffect(() => {
     let updated = [...projects];
@@ -187,11 +228,8 @@ const useMarketplace = (id?: string): UseMarketplace => {
       updated = updated.filter((p) => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
     if (sortBy === 'price-asc') updated.sort((a, b) => +a.price - +b.price);
-
     if (sortBy === 'price-desc') updated.sort((a, b) => +b.price - +a.price);
-
     if (sortBy === 'name') updated.sort((a, b) => a.name.localeCompare(b.name));
-
     if (sortBy === 'recently-update')
       updated.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
