@@ -3,10 +3,16 @@ import MarketplaceByIdClient from '@/components/Marketplace/MarketplaceByIdClien
 
 export const dynamic = 'force-dynamic';
 
-export default function Page({ params }: { params: { id: string } }) {
+type Params = { id: string };
+
+// Next 15 a veces tipa params como Promise en el build.
+// Esto lo hace compatible con ambos casos (objeto o Promise).
+export default async function Page({ params }: { params: Params | Promise<Params> }) {
+  const resolved = await Promise.resolve(params);
+
   return (
     <Suspense fallback={null}>
-      <MarketplaceByIdClient id={params.id} />
+      <MarketplaceByIdClient id={resolved.id} />
     </Suspense>
   );
 }
