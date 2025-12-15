@@ -3,7 +3,7 @@ import MarketplaceByIdClient from '@/components/Marketplace/MarketplaceByIdClien
 
 export const dynamic = 'force-dynamic';
 
-export default function Page({ params }: { params: { id: string } }) {
+export default function MarketplaceByIdPage({ params }: { params: { id: string } }) {
   return (
     <Suspense fallback={null}>
       <MarketplaceByIdClient id={params.id} />
