@@ -1,235 +1,167 @@
-import { useEffect, useState } from 'react';
-import { Price, RetireParams, UseMarketplace } from '@/types/marketplace';
+import { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
 import { Project } from '@/types/project';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
-import { useModal } from '@/context/ModalContext';
-import { LATAM_COUNTRIES, PRICE_MULTIPLIER } from '@/constants';
-import qs from 'qs';
-import { useRetire } from '../context/RetireContext';
-import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
+import { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
 
-type CarbonmarkListResponse<T> = {
-  items: T[];
-};
+/**
+ * Backend base URL
+ * - Local: http://localhost:5000
+ * - Prod: https://tu-backend.com
+ */
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
-const unwrapItems = <T>(raw: unknown): T[] => {
-  if (Array.isArray(raw)) return raw as T[];
-  if (raw && typeof raw === 'object' && 'items' in raw) {
-    const r = raw as CarbonmarkListResponse<T>;
-    if (Array.isArray(r.items)) return r.items;
-  }
-  return [];
-};
-
-const safeNumber = (value: unknown): number | null => {
-  const n = typeof value === 'number' ? value : typeof value === 'string' ? parseFloat(value) : NaN;
-  return Number.isFinite(n) ? n : null;
+/**
+ * Endpoints reales según tu backend (Express)
+ */
+const ENDPOINTS = {
+  projects: `${API_BASE}/api/carbon/carbonProjects`,
+  projectById: (id: string) => `${API_BASE}/api/carbon/carbonProjects/${encodeURIComponent(id)}`,
+  prices: `${API_BASE}/api/carbon/prices`,
 };
 
 const useMarketplace = (id?: string): UseMarketplace => {
-  const [isPricesLoading, setIsPricesLoading] = useState<boolean>(true);
-  const [prices, setPrices] = useState<Price[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
-  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
-  const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
+  const [project, setProject] = useState<Project | null>(null);
+  const [prices, setPrices] = useState<Price[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [isPricesLoading, setIsPricesLoading] = useState<boolean>(true);
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('price_asc');
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [sortBy, setSortBy] = useState<string>('price-desc');
-  const [loading, setLoading] = useState<boolean>(true);
-  const [project, setProject] = useState<Project | null>(null);
 
-  const { isAuthenticated, setRedirectUrl } = useAuth();
-  const { openModal } = useModal();
-  const { setTotalSupply } = useRetire();
-  const router = useRouter();
-
-  const handleRetire = ({ id, index, priceParam, selectedVintage }: RetireParams) => {
-    if (!id) return;
-
-    const methodologyName = project?.methodologies?.[0]?.name || 'Sin metodología';
-    const encodedMethodologyName = encodeURIComponent(methodologyName);
-
-    const url = `/retireCheckout?index=${index}&projectIds=${id}&priceParam=${priceParam}&methodologyName=${encodedMethodologyName}&selectedVintage=${selectedVintage}`;
-
-    if (!isAuthenticated) {
-      setRedirectUrl(url);
-      openModal('login');
-      return;
-    }
-
-    router.push(url);
-  };
-
-  // -------------------------------------------------------------
-  // 1) GET PROJECT BY ID
-  // -------------------------------------------------------------
+  /* =========================
+     FETCH PROJECTS (LIST)
+  ========================== */
   useEffect(() => {
-    if (!id) return;
+    if (id) return;
 
-    const fetchProject = async () => {
-      try {
-        const response = await axiosPublicInstance.get<Project>(`/carbon/carbonProjects/${id}`);
-        let data = response.data;
-
-        // Ajuste de precio
-        const n = safeNumber((data as unknown as { price?: unknown })?.price);
-        if (n !== null) {
-          data = { ...(data as Project), price: (n * PRICE_MULTIPLIER).toString() };
-        }
-
-        // stats puede venir en v18, si existe lo guardamos
-        const totalSupply = (data as unknown as { stats?: { totalSupply?: number } })?.stats
-          ?.totalSupply;
-        if (typeof totalSupply === 'number') setTotalSupply(totalSupply);
-
-        setProject(data);
-      } catch (error) {
-        console.error('Error fetching project details:', error);
-        setProject(null);
-      }
-    };
-
-    fetchProject();
-  }, [id, setTotalSupply]);
-
-  // -------------------------------------------------------------
-  // 2) GET ALL PROJECTS
-  //   Tu backend ya devuelve ARRAY (porque lo unwrappea en controller/service)
-  // -------------------------------------------------------------
-  useEffect(() => {
     const fetchProjects = async () => {
-      setLoading(true);
       try {
-        const response = await axiosPublicInstance.get<Project[]>('/carbon/carbonProjects', {
-          params: {
-            minSupply: 1,
-            country: [...LATAM_COUNTRIES, 'Indonesia'],
-          },
-          paramsSerializer: (params) => qs.stringify(params, { arrayFormat: 'repeat' }),
-        });
+        setLoading(true);
+        const { data } = await axios.get<Project[]>(ENDPOINTS.projects);
 
-        const list = Array.isArray(response.data)
-          ? response.data
-          : unwrapItems<Project>(response.data);
-
-        const updated = list.map((proj) => {
-          const n = safeNumber((proj as unknown as { price?: unknown })?.price);
-          if (n === null) return proj;
-          return { ...proj, price: (n * PRICE_MULTIPLIER).toString() };
-        });
-
-        const uniqueCategories = Array.from(
-          new Set(updated.flatMap((p) => p.methodologies?.map((m) => m.category) || []))
+        setProjects(
+          data.map((p) => ({
+            ...p,
+            images: p.images ?? [],
+            description: p.short_description || p.description || 'No description available',
+            displayPrice: p.price,
+            selectedVintage: p.vintages?.[0],
+          }))
         );
-
-        setProjects(updated);
-        setFilteredProjects(updated);
-        setAvailableCategories(uniqueCategories);
-      } catch (error) {
-        console.error('Error fetching projects:', error);
-        setProjects([]);
-        setFilteredProjects([]);
-        setAvailableCategories([]);
+      } catch (err) {
+        console.error('Error fetching projects', err);
       } finally {
         setLoading(false);
       }
     };
 
     fetchProjects();
-  }, []);
+  }, [id]);
 
-  // -------------------------------------------------------------
-  // 3) GET PRICES
-  // -------------------------------------------------------------
+  /* =========================
+     FETCH SINGLE PROJECT
+  ========================== */
+  useEffect(() => {
+    if (!id) return;
+
+    const fetchProject = async () => {
+      try {
+        setLoading(true);
+        const { data } = await axios.get<Project>(ENDPOINTS.projectById(id));
+
+        setProject({
+          ...data,
+          images: data.images ?? [],
+          description: data.long_description || data.description || 'No description available',
+          displayPrice: data.price,
+          selectedVintage: data.vintages?.[0],
+        });
+      } catch (err) {
+        console.error('Error fetching project', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProject();
+  }, [id]);
+
+  /* =========================
+     FETCH PRICES
+  ========================== */
   useEffect(() => {
     const fetchPrices = async () => {
       try {
-        if (projects.length === 0) return;
-
-        const response = await axiosPublicInstance.get<Price[] | { items: Price[] }>(
-          '/carbon/prices',
-          {
-            params: {
-              projectIds: projects.map((p) => p.key),
-              minSupply: 1,
-            },
-            paramsSerializer: (params) => qs.stringify(params, { arrayFormat: 'repeat' }),
-          }
-        );
-
-        const list = Array.isArray(response.data)
-          ? response.data
-          : unwrapItems<Price>(response.data);
-
-        const updated = list.map((priceItem) => ({
-          ...priceItem,
-          purchasePrice: priceItem.purchasePrice * PRICE_MULTIPLIER,
-        }));
-
-        setPrices(updated);
-        setIsPricesLoading(false);
-      } catch (error) {
-        console.error('Error fetching prices:', error);
-        setPrices([]);
+        setIsPricesLoading(true);
+        const { data } = await axios.get<Price[]>(ENDPOINTS.prices);
+        setPrices(data);
+      } catch (err) {
+        console.error('Error fetching prices', err);
+      } finally {
         setIsPricesLoading(false);
       }
     };
 
     fetchPrices();
-  }, [projects]);
+  }, []);
 
-  // -------------------------------------------------------------
-  // 4) FILTERS + SORTING
-  // -------------------------------------------------------------
-  useEffect(() => {
-    let updated = [...projects];
+  /* =========================
+     FILTERED PROJECTS
+  ========================== */
+  const filteredProjects = useMemo(() => {
+    let list = [...projects];
 
-    if (selectedCountries.length)
-      updated = updated.filter((p) => selectedCountries.includes(p.country));
-
-    if (selectedCategories.length)
-      updated = updated.filter((p) =>
-        p.methodologies?.some((m) => selectedCategories.includes(m.category))
-      );
-
-    if (selectedVintages.length)
-      updated = updated.filter((p) => p.vintages?.some((v) => selectedVintages.includes(v)));
-
-    if (selectedUNSDG.length)
-      updated = updated.filter((p) =>
-        p.sustainableDevelopmentGoals?.some((sdg) => selectedUNSDG.includes(sdg))
-      );
-
-    if (searchTerm)
-      updated = updated.filter((p) => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
-
-    if (sortBy === 'price-asc') updated.sort((a, b) => +a.price - +b.price);
-    if (sortBy === 'price-desc') updated.sort((a, b) => +b.price - +a.price);
-    if (sortBy === 'name') updated.sort((a, b) => a.name.localeCompare(b.name));
-
-    if (sortBy === 'recently-update') {
-      updated.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    if (searchTerm) {
+      list = list.filter((p) => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
     }
 
-    setFilteredProjects(updated);
-  }, [
-    selectedCountries,
-    selectedCategories,
-    selectedVintages,
-    selectedUNSDG,
-    searchTerm,
-    sortBy,
-    projects,
-  ]);
+    if (selectedCountries.length) {
+      list = list.filter((p) => selectedCountries.includes(p.country));
+    }
+
+    if (selectedCategories.length) {
+      list = list.filter((p) => selectedCategories.includes(p.category || ''));
+    }
+
+    if (selectedVintages.length) {
+      list = list.filter((p) => p.vintages?.some((v) => selectedVintages.includes(v)));
+    }
+
+    if (sortBy === 'price_asc') {
+      list.sort((a, b) => Number(a.displayPrice || 0) - Number(b.displayPrice || 0));
+    }
+
+    if (sortBy === 'price_desc') {
+      list.sort((a, b) => Number(b.displayPrice || 0) - Number(a.displayPrice || 0));
+    }
+
+    return list;
+  }, [projects, searchTerm, selectedCountries, selectedCategories, selectedVintages, sortBy]);
+
+  /* =========================
+     HANDLE RETIRE (BUY)
+  ========================== */
+  const handleRetire = (params: RetireParams) => {
+    console.log('RETIRE / BUY:', params);
+    // acá va tu flujo real de compra
+  };
 
   return {
     filteredProjects,
     loading,
-    availableCategories,
+    availableCategories: Array.from(
+      new Set(
+        projects
+          .map((p) => p.category)
+          .filter((c): c is string => typeof c === 'string' && c.length > 0)
+      )
+    ),
+
     selectedCountries,
     setSelectedCountries,
     selectedCategories,
@@ -243,6 +175,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
     sortBy,
     setSortBy,
     projects,
+    setProjects,
     project,
     handleRetire,
     prices,
