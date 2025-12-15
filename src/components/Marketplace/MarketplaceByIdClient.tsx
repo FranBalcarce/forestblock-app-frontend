@@ -3,10 +3,17 @@
 import React, { useMemo } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+
 import useMarketplace from '@/hooks/useMarketplace';
+import type { Price } from '@/types/marketplace';
+
+/* ---------------------------------------------------
+ Helpers
+--------------------------------------------------- */
 
 const getImageSrc = (img: unknown): string | null => {
   if (!img) return null;
+
   if (typeof img === 'string') return img;
 
   if (Array.isArray(img)) {
@@ -31,33 +38,62 @@ const getImageSrc = (img: unknown): string | null => {
   return null;
 };
 
-type Props = { id: string };
+const getPriceProjectId = (p: Price): string | null => {
+  return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId.projectId ?? null;
+};
+
+/* ---------------------------------------------------
+ Props
+--------------------------------------------------- */
+
+type Props = {
+  id: string;
+};
+
+/* ---------------------------------------------------
+ Component
+--------------------------------------------------- */
 
 export default function MarketplaceByIdClient({ id }: Props) {
   const router = useRouter();
-  const { project, prices, isPricesLoading, handleRetire } = useMarketplace(id);
 
-  const imageSrc = useMemo(() => getImageSrc(project?.images), [project]);
+  const { project, prices, loading } = useMarketplace(id);
+
+  const imageSrc = useMemo(() => (project ? getImageSrc(project.images) : null), [project]);
+
+  const price = useMemo(() => {
+    if (!project) return null;
+
+    const found = prices.find((p) => getPriceProjectId(p) === project.key);
+
+    return found ? found.purchasePrice : null;
+  }, [prices, project]);
+
+  /* ---------------------------------------------------
+   States
+  --------------------------------------------------- */
+
+  if (loading) {
+    return <div className="max-w-6xl mx-auto px-4 py-10">Cargando proyecto…</div>;
+  }
 
   if (!project) {
     return (
-      <div className="max-w-6xl mx-auto px-4 py-6 md:py-10">
+      <div className="max-w-6xl mx-auto px-4 py-10">
+        <p className="mb-4">Proyecto no encontrado.</p>
         <button
           onClick={() => router.back()}
-          className="mb-4 rounded-full bg-black/5 px-4 py-2 text-sm hover:bg-black/10"
+          className="rounded-full bg-black/5 px-4 py-2 text-sm hover:bg-black/10"
         >
-          ← Volver
+          Volver
         </button>
-        <div className="rounded-3xl border border-black/5 bg-white shadow-sm p-6">
-          <p className="text-black/70">Cargando proyecto...</p>
-        </div>
       </div>
     );
   }
 
-  // precio: en tu modelo actual el precio de proyecto viene en project.price,
-  // y prices es otra lista (si la usás para checkout).
-  const displayPrice = project?.price ? Number(project.price) : null;
+  /* ---------------------------------------------------
+   Render
+  --------------------------------------------------- */
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 md:py-10">
@@ -71,14 +107,7 @@ export default function MarketplaceByIdClient({ id }: Props) {
       <div className="rounded-3xl border border-black/5 bg-white shadow-sm overflow-hidden">
         <div className="relative h-56 md:h-72 bg-black/5">
           {imageSrc ? (
-            <Image
-              src={imageSrc}
-              alt={project.name}
-              fill
-              priority
-              unoptimized
-              style={{ objectFit: 'cover' }}
-            />
+            <Image src={imageSrc} alt={project.name} fill priority style={{ objectFit: 'cover' }} />
           ) : (
             <div className="h-full w-full flex items-center justify-center text-black/40">
               Sin imagen
@@ -89,51 +118,13 @@ export default function MarketplaceByIdClient({ id }: Props) {
         <div className="p-6">
           <h1 className="text-2xl font-semibold">{project.name}</h1>
 
-          <div className="mt-3 flex flex-wrap gap-2 text-sm">
-            {project.country ? (
-              <span className="px-3 py-1 rounded-full bg-black/5">{project.country}</span>
-            ) : null}
-            {project.region ? (
-              <span className="px-3 py-1 rounded-full bg-black/5">{project.region}</span>
-            ) : null}
-            {project.updatedAt ? (
-              <span className="px-3 py-1 rounded-full bg-black/5">
-                Actualizado: {new Date(project.updatedAt).toLocaleDateString('es-AR')}
-              </span>
-            ) : null}
-          </div>
+          {project.description && <p className="mt-3 text-black/70">{project.description}</p>}
 
-          <p className="mt-4 text-black/70 whitespace-pre-line">
-            {project.description ||
-              // v18 a veces viene short_description / long_description
-              (project as any)?.short_description ||
-              (project as any)?.long_description ||
-              'Sin descripción.'}
-          </p>
-
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            {displayPrice !== null ? (
-              <div className="text-sm text-black/70">
-                <span className="font-medium text-black">Precio:</span> ${displayPrice.toFixed(2)}
-              </div>
-            ) : null}
-
-            <button
-              type="button"
-              disabled={isPricesLoading}
-              onClick={() =>
-                handleRetire({
-                  id: project.key,
-                  index: 0,
-                  priceParam: project.price,
-                  selectedVintage: project.vintages?.[0] ?? '',
-                })
-              }
-              className="rounded-full px-4 py-2 bg-forestGreen text-white text-sm font-medium hover:bg-forestGreen/90 transition disabled:opacity-60"
-            >
-              {isPricesLoading ? 'Cargando precio...' : 'Comprar / Retirar'}
-            </button>
-          </div>
+          {price !== null && (
+            <div className="mt-4 text-lg font-semibold text-forestGreen">
+              Precio: ${price.toFixed(2)} / tCO₂
+            </div>
+          )}
         </div>
       </div>
     </div>
