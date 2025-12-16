@@ -1,5 +1,3 @@
-// src/data/devProjects.ts
-
 export type DevProject = {
   key: string;
   name: string;
@@ -7,7 +5,7 @@ export type DevProject = {
   country: string;
   year: number;
   tipo: string;
-  stage: 'Piloto' | 'Fase 1';
+  stage: string;
   shortDescription: string;
   description: string;
   location: {
@@ -19,51 +17,46 @@ export type DevProject = {
 
 export const DEV_PROJECTS: DevProject[] = [
   {
-    key: 'nf-romeral',
-    name: 'Proyecto El Romeral',
-    image: '/images/dev/romeral.jpg', // poné la imagen acá
+    key: 'nf-azul-001',
+    name: 'Proyecto Romeral',
+    image: '/images/projects/romeral.jpg',
     country: 'Argentina',
-    year: 2025,
-    tipo: 'Forestry / REDD+',
+    year: 2024,
+    tipo: 'Forestry',
     stage: 'Piloto',
     shortDescription:
       'Proyecto forestal enfocado en captura de carbono mediante restauración de bosque nativo.',
-    description: `
-Proyecto REDD+ / ARR / IFM ubicado en El Copo, Santiago del Estero.
+    description: `El Proyecto Romeral tiene como objetivo la restauración ecológica
+y la captura de carbono mediante la recuperación de bosque nativo degradado.
 
-El proyecto combina conservación, restauración y silvopastoreo integrado,
-con un horizonte operativo de 40 años y un fuerte impacto en captura de CO₂.
-
-VCUs estimados: ~880.000 en 10 años.
-Precio estimado: USD 18–22 / VCU.
-    `,
+El proyecto contempla manejo forestal sostenible, monitoreo de carbono
+y generación futura de créditos certificados.`,
     location: {
-      lat: -25.9,
-      lng: -62.7,
-      label: 'El Copo, Santiago del Estero',
+      lat: -40.585,
+      lng: -71.091,
+      label: 'Río Negro, Argentina',
     },
   },
+
   {
-    key: 'nf-ente-rn',
-    name: 'ENTE Río Negro – Ganadería Regenerativa',
-    image: '/images/dev/ente-rn.jpg', // poné la imagen acá
+    key: 'nf-eff-002',
+    name: 'ENTE Río Negro',
+    image: '/images/projects/ente-rn.jpg',
     country: 'Argentina',
-    year: 2026,
-    tipo: 'Eficiencia energética / ALM',
+    year: 2024,
+    tipo: 'Eficiencia energética',
     stage: 'Fase 1',
-    shortDescription: 'Proyecto de ganadería regenerativa y manejo de suelos en la Patagonia.',
-    description: `
-Proyecto ALM (Improved Agricultural Land Management) en la Región Sur de Río Negro.
+    shortDescription:
+      'Proyecto de eficiencia energética y reducción de emisiones en infraestructura pública.',
+    description: `Programa de eficiencia energética en edificios públicos
+orientado a la reducción del consumo eléctrico y emisiones de GEI.
 
-Busca regenerar pastizales naturales degradados y aumentar el stock de carbono
-en suelos mediante prácticas ganaderas sostenibles.
-
-Área inicial: 10.000 ha (piloto).
-    `,
+Incluye recambio tecnológico, auditorías energéticas
+y medición de impacto ambiental.`,
     location: {
-      lat: -41.5,
-      lng: -66.5,
-      label: 'Región Sur, Río Negro',
+      lat: -40.731,
+      lng: -71.002,
+      label: 'Río Negro, Argentina',
     },
   },
 ];
