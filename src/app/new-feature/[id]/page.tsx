@@ -1,62 +1,136 @@
 'use client';
 
-import { devProjects } from '@/data/devProjects';
+import Image from 'next/image';
+import Link from 'next/link';
+import dynamic from 'next/dynamic';
+import { useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import MapView from '@/components/ProjectInfo/MapView';
+import { getDevProjectById } from '@/data/devProjects';
 
-export default function DevProjectDetail() {
-  const { id } = useParams<{ id: string }>();
+// ✅ Import dinámico para evitar SSR con Leaflet (si lo usa tu MapView)
+const MapView = dynamic(() => import('@/components/ProjectInfo/MapView'), { ssr: false });
+
+export default function DevProjectDetailPage() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
+  const projectId = params?.id ?? '';
 
-  const project = devProjects.find((p) => p.id === id);
+  const project = useMemo(() => getDevProjectById(projectId), [projectId]);
 
-  if (!project) return <div>Proyecto no encontrado</div>;
+  if (!project) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <p className="mb-4">Proyecto no encontrado.</p>
+        <Link href="/new-feature" className="text-forestGreen underline">
+          Volver a proyectos en desarrollo
+        </Link>
+      </div>
+    );
+  }
+
+  const contactUrl = 'https://www.forestblock.tech/contact/contacto';
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
+    <div className="max-w-6xl mx-auto px-4 py-6 md:py-10">
+      {/* Botón volver */}
       <button
+        type="button"
         onClick={() => router.back()}
-        className="mb-4 text-sm bg-black/5 px-4 py-2 rounded-full"
+        className="mb-4 inline-flex items-center gap-2 rounded-full bg-black/5 px-3 py-1.5 text-sm text-black hover:bg-black/10 transition"
       >
-        ← Volver
+        <span className="text-lg leading-none">←</span>
+        <span>Volver</span>
       </button>
 
-      {/* Banner */}
-      <div className="rounded-3xl overflow-hidden bg-white shadow">
-        <div
-          className="h-72 bg-cover bg-center relative"
-          style={{ backgroundImage: `url(${project.image})` }}
-        >
-          <div className="absolute top-4 left-4 bg-white px-3 py-1 rounded-full text-sm font-medium">
-            {project.country} · {project.year} · {project.category}
-          </div>
-
-          <div className="absolute top-4 right-4 bg-forestGreen text-white px-3 py-1 rounded-full text-sm font-medium">
-            {project.stage}
-          </div>
+      {/* HEADER con imagen */}
+      <div className="mb-8 rounded-3xl overflow-hidden relative">
+        <div className="relative h-64 md:h-80 bg-black/5">
+          <Image
+            src={project.image}
+            alt={project.name}
+            fill
+            style={{ objectFit: 'cover' }}
+            priority
+          />
         </div>
 
-        <div className="p-6">
-          <h1 className="text-3xl font-semibold">{project.name}</h1>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/40 to-transparent" />
 
-          <p className="mt-4 text-black/70 whitespace-pre-line">{project.longDescription}</p>
+        <div className="absolute bottom-6 left-6 right-6 flex flex-col gap-3">
+          <span className="inline-flex items-center px-3 py-1 rounded-full bg-white/20 text-white text-sm backdrop-blur">
+            Proyectos en desarrollo
+          </span>
 
-          {/* Mapa */}
-          <div className="mt-10">
-            <h2 className="text-lg font-semibold mb-3">Ubicación</h2>
+          <h1 className="text-2xl md:text-4xl font-aeonik font-semibold text-white">
+            {project.name}
+          </h1>
 
-            <div className="h-80 rounded-xl overflow-hidden border">
+          <div className="flex flex-wrap gap-2 text-sm">
+            <span className="px-3 py-1 rounded-full bg-white/18 text-white">{project.country}</span>
+            <span className="px-3 py-1 rounded-full bg-white/18 text-white">{project.year}</span>
+            <span className="px-3 py-1 rounded-full bg-mintGreen text-forestGreen">
+              {project.tipo}
+            </span>
+
+            {/* ✅ ETAPA (lo que pediste) */}
+            <span className="px-3 py-1 rounded-full bg-white/20 text-white backdrop-blur">
+              Etapa: {project.stage}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* CONTENIDO */}
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr),minmax(0,1.2fr)] gap-8">
+        {/* Descripción */}
+        <section>
+          <h2 className="text-xl font-semibold mb-3">Descripción</h2>
+          <p className="leading-relaxed text-black/80 whitespace-pre-line">
+            {project.longDescription}
+          </p>
+        </section>
+
+        {/* Aside */}
+        <aside className="bg-white rounded-3xl p-5 shadow-sm border border-black/5 flex flex-col gap-4">
+          {/* ✅ MAPA */}
+          <div>
+            <h2 className="text-lg font-semibold mb-2">Ubicación</h2>
+            <p className="text-sm text-black/70 mb-3">{project.location.label}</p>
+
+            <div className="h-56 rounded-2xl overflow-hidden border border-black/5">
               <MapView
                 projectLocations={[
-                  {
-                    coordinates: [project.location.lat, project.location.lng],
-                    name: project.name,
-                  },
+                  { coordinates: project.location.coordinates, name: project.name },
                 ]}
               />
             </div>
           </div>
-        </div>
+
+          {/* CTA */}
+          <div className="pt-2">
+            <h2 className="text-lg font-semibold mb-2">¿Te interesa este proyecto?</h2>
+            <p className="text-sm text-black/70 mb-4">
+              Completá el formulario de contacto para que el equipo de Forestblock pueda enviarte
+              más información sobre <span className="font-medium">{project.name}</span>.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => router.push(contactUrl)}
+              className="w-full rounded-full px-4 py-2 bg-forestGreen text-white text-sm font-medium hover:bg-forestGreen/90 transition"
+            >
+              Ir al formulario de contacto
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push('/new-feature')}
+              className="mt-3 text-sm text-forestGreen underline text-left"
+            >
+              Volver a proyectos en desarrollo
+            </button>
+          </div>
+        </aside>
       </div>
     </div>
   );
