@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Project } from '@/types/project';
-import { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
+import type { Project } from '@/types/project';
+import type { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
 /**
- * Endpoints del backend (Express)
- * baseURL viene de NEXT_PUBLIC_API_BASE_URL
+ * Endpoints del backend Express (relativos al baseURL de axiosPublicInstance)
+ * baseURL = process.env.NEXT_PUBLIC_API_BASE_URL
+ *
+ * Ej en local:
+ * NEXT_PUBLIC_API_BASE_URL=http://localhost:5000
+ * => GET http://localhost:5000/api/carbon/carbonProjects
  */
 const ENDPOINTS = {
   projects: '/api/carbon/carbonProjects',
@@ -13,11 +17,94 @@ const ENDPOINTS = {
   prices: '/api/carbon/prices',
 };
 
+// --- helpers types ---
+type Maybe<T> = T | null | undefined;
+
+// Carbonmark/Backend a veces devuelve { items: [...] } o directamente [...]
+function unwrapArray<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>;
+    if (Array.isArray(obj.items)) return obj.items as T[];
+    if (Array.isArray(obj.data)) return obj.data as T[];
+    if (Array.isArray(obj.results)) return obj.results as T[];
+  }
+  return [];
+}
+
+function safeString(v: unknown, fallback = ''): string {
+  return typeof v === 'string' ? v : fallback;
+}
+
+function safeNumberString(v: unknown, fallback = '0'): string {
+  // acepta "0.58" o 0.58
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) return v;
+  return fallback;
+}
+
+// Normaliza imágenes para tu type Project (Image[] y coverImage Image)
+function normalizeProjectImages(p: Project): Project {
+  // En tu type:
+  // images: Image[]
+  // coverImage: Image
+  // Pero algunos proyectos pueden venir sin images o con satelliteImage etc.
+  const imagesArr = Array.isArray((p as any).images) ? ((p as any).images as any[]) : [];
+  const normalizedImages = imagesArr
+    .map((img) => {
+      // acepta string u objeto
+      if (typeof img === 'string') return { url: img, caption: '' };
+      if (img && typeof img === 'object') {
+        const o = img as Record<string, unknown>;
+        const url = typeof o.url === 'string' ? o.url : typeof o.src === 'string' ? o.src : '';
+        const caption = typeof o.caption === 'string' ? o.caption : '';
+        if (url) return { url, caption };
+      }
+      return null;
+    })
+    .filter((x): x is { url: string; caption: string } => !!x);
+
+  // coverImage puede venir como {url} o vacío
+  let coverImage = (p as any).coverImage;
+  if (!coverImage || typeof coverImage !== 'object') {
+    coverImage = normalizedImages[0]
+      ? { url: normalizedImages[0].url, caption: '' }
+      : { url: '', caption: '' };
+  } else {
+    const o = coverImage as Record<string, unknown>;
+    const url = typeof o.url === 'string' ? o.url : typeof o.src === 'string' ? o.src : '';
+    const caption = typeof o.caption === 'string' ? o.caption : '';
+    coverImage = { url, caption };
+  }
+
+  return {
+    ...p,
+    images: normalizedImages as any,
+    coverImage: coverImage as any,
+  };
+}
+
+// Price -> projectId (tu backend ya te los devuelve así en listing/carbonPool)
+const getProjectIdFromPrice = (pr: Price): string | undefined => {
+  return pr.listing?.creditId?.projectId ?? pr.carbonPool?.creditId?.projectId;
+};
+
+// Devuelve el “mejor precio” para mostrar en cards: el menor purchasePrice para el proyecto
+function computeDisplayPriceForProject(projectKey: string, prices: Price[]): string | undefined {
+  const matches = prices.filter((p) => getProjectIdFromPrice(p) === projectKey);
+  if (!matches.length) return undefined;
+  const min = matches.reduce(
+    (acc, cur) => (cur.purchasePrice < acc.purchasePrice ? cur : acc),
+    matches[0]
+  );
+  return min.purchasePrice.toFixed(2);
+}
+
 const useMarketplace = (id?: string): UseMarketplace => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
-  const [prices, setPrices] = useState<Price[]>([]);
 
+  const [prices, setPrices] = useState<Price[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isPricesLoading, setIsPricesLoading] = useState<boolean>(true);
 
@@ -30,7 +117,28 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
   /* =========================
-     FETCH PROJECTS (LISTADO)
+     FETCH PRICES (SIEMPRE)
+  ========================== */
+  useEffect(() => {
+    const fetchPrices = async () => {
+      try {
+        setIsPricesLoading(true);
+        const res = await axiosPublicInstance.get(ENDPOINTS.prices);
+        const arr = unwrapArray<Price>(res.data);
+        setPrices(arr);
+      } catch (err) {
+        console.error('Error fetching prices', err);
+        setPrices([]);
+      } finally {
+        setIsPricesLoading(false);
+      }
+    };
+
+    fetchPrices();
+  }, []);
+
+  /* =========================
+     FETCH PROJECTS (LIST)
   ========================== */
   useEffect(() => {
     if (id) return;
@@ -39,20 +147,37 @@ const useMarketplace = (id?: string): UseMarketplace => {
       try {
         setLoading(true);
 
-        const res = await axiosPublicInstance.get<Project[]>(ENDPOINTS.projects);
-        const data = res.data ?? [];
+        const res = await axiosPublicInstance.get(ENDPOINTS.projects);
+        const arr = unwrapArray<Project>(res.data);
 
-        setProjects(
-          data.map((p: Project) => ({
-            ...p,
-            images: p.images ?? [],
-            description: p.short_description || p.description || 'No description available',
-            displayPrice: p.price,
-            selectedVintage: p.vintages?.[0],
-          }))
-        );
+        const normalized = arr.map((raw: Project) => {
+          const p0 = normalizeProjectImages(raw);
+
+          // descripción para card
+          const desc =
+            safeString((p0 as any).short_description) ||
+            safeString((p0 as any).description) ||
+            'No description available';
+
+          // vintage default
+          const vintages = Array.isArray(p0.vintages) ? p0.vintages : [];
+          const selectedVintage = vintages[0] ?? '';
+
+          // precio base (si viene del proyecto)
+          const basePrice = safeNumberString((p0 as any).price, '0');
+
+          return {
+            ...p0,
+            description: desc,
+            selectedVintage,
+            displayPrice: basePrice, // después lo sobreescribimos con prices si hay
+          };
+        });
+
+        setProjects(normalized);
       } catch (err) {
         console.error('Error fetching projects', err);
+        setProjects([]);
       } finally {
         setLoading(false);
       }
@@ -71,18 +196,34 @@ const useMarketplace = (id?: string): UseMarketplace => {
       try {
         setLoading(true);
 
-        const res = await axiosPublicInstance.get<Project>(ENDPOINTS.projectById(id));
-        const data = res.data;
+        const res = await axiosPublicInstance.get(ENDPOINTS.projectById(id));
+        // a veces viene { item: {...} } o directo
+        const data =
+          res.data && typeof res.data === 'object'
+            ? (('item' in res.data ? (res.data as any).item : res.data) as Project)
+            : (res.data as Project);
+
+        const p0 = normalizeProjectImages(data);
+
+        const desc =
+          safeString((p0 as any).long_description) ||
+          safeString((p0 as any).description) ||
+          'No description available';
+
+        const vintages = Array.isArray(p0.vintages) ? p0.vintages : [];
+        const selectedVintage = vintages[0] ?? '';
+
+        const basePrice = safeNumberString((p0 as any).price, '0');
 
         setProject({
-          ...data,
-          images: data.images ?? [],
-          description: data.long_description || data.description || 'No description available',
-          displayPrice: data.price,
-          selectedVintage: data.vintages?.[0],
+          ...p0,
+          description: desc,
+          selectedVintage,
+          displayPrice: basePrice,
         });
       } catch (err) {
         console.error('Error fetching project', err);
+        setProject(null);
       } finally {
         setLoading(false);
       }
@@ -92,23 +233,46 @@ const useMarketplace = (id?: string): UseMarketplace => {
   }, [id]);
 
   /* =========================
-     FETCH PRICES
+     INYECTAR displayPrice REAL DESDE /prices
+     (esto arregla el $0.00 en las cards)
   ========================== */
   useEffect(() => {
-    const fetchPrices = async () => {
-      try {
-        setIsPricesLoading(true);
-        const res = await axiosPublicInstance.get<Price[]>(ENDPOINTS.prices);
-        setPrices(res.data ?? []);
-      } catch (err) {
-        console.error('Error fetching prices', err);
-      } finally {
-        setIsPricesLoading(false);
-      }
-    };
+    if (!prices.length) return;
 
-    fetchPrices();
-  }, []);
+    // lista
+    setProjects((prev) =>
+      prev.map((p) => {
+        const real = computeDisplayPriceForProject(p.key, prices);
+        return {
+          ...p,
+          displayPrice: real ?? p.displayPrice ?? safeNumberString((p as any).price, '0'),
+        };
+      })
+    );
+
+    // detalle
+    setProject((prev) => {
+      if (!prev) return prev;
+      const real = computeDisplayPriceForProject(prev.key, prices);
+      return {
+        ...prev,
+        displayPrice: real ?? prev.displayPrice ?? safeNumberString((prev as any).price, '0'),
+      };
+    });
+  }, [prices]);
+
+  /* =========================
+     AVAILABLE CATEGORIES
+  ========================== */
+  const availableCategories = useMemo(() => {
+    return Array.from(
+      new Set(
+        projects
+          .map((p) => p.category)
+          .filter((c): c is string => typeof c === 'string' && c.length > 0)
+      )
+    );
+  }, [projects]);
 
   /* =========================
      FILTERED PROJECTS
@@ -117,7 +281,8 @@ const useMarketplace = (id?: string): UseMarketplace => {
     let list = [...projects];
 
     if (searchTerm) {
-      list = list.filter((p) => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      const t = searchTerm.toLowerCase();
+      list = list.filter((p) => p.name?.toLowerCase().includes(t));
     }
 
     if (selectedCountries.length) {
@@ -125,46 +290,52 @@ const useMarketplace = (id?: string): UseMarketplace => {
     }
 
     if (selectedCategories.length) {
-      list = list.filter((p) => selectedCategories.includes(p.category ?? ''));
+      list = list.filter((p) => selectedCategories.includes(p.category || ''));
     }
 
     if (selectedVintages.length) {
       list = list.filter((p) => p.vintages?.some((v) => selectedVintages.includes(v)));
     }
 
+    // (si después querés sumar UNSDG, lo hacemos; ahora lo dejo sin romper)
+    if (selectedUNSDG.length) {
+      list = list.filter((p) =>
+        (p.sustainableDevelopmentGoals || []).some((sdg) => selectedUNSDG.includes(sdg))
+      );
+    }
+
     if (sortBy === 'price_asc') {
-      list.sort((a, b) => Number(a.displayPrice ?? 0) - Number(b.displayPrice ?? 0));
+      list.sort((a, b) => Number(a.displayPrice || 0) - Number(b.displayPrice || 0));
     }
 
     if (sortBy === 'price_desc') {
-      list.sort((a, b) => Number(b.displayPrice ?? 0) - Number(a.displayPrice ?? 0));
+      list.sort((a, b) => Number(b.displayPrice || 0) - Number(a.displayPrice || 0));
     }
 
     return list;
-  }, [projects, searchTerm, selectedCountries, selectedCategories, selectedVintages, sortBy]);
+  }, [
+    projects,
+    searchTerm,
+    selectedCountries,
+    selectedCategories,
+    selectedVintages,
+    selectedUNSDG,
+    sortBy,
+  ]);
 
   /* =========================
-     HANDLE BUY / RETIRE
+     HANDLE RETIRE (BUY)
+     (por ahora log; tu flujo real lo conectás al checkout)
   ========================== */
   const handleRetire = (params: RetireParams) => {
     console.log('RETIRE / BUY:', params);
-    // Acá va el flujo real (checkout / retiro)
+    // Acá va tu flujo real (ej: router.push a checkout)
   };
 
-  /* =========================
-     RETURN
-  ========================== */
   return {
     filteredProjects,
     loading,
-
-    availableCategories: Array.from(
-      new Set(
-        projects
-          .map((p) => p.category)
-          .filter((c): c is string => typeof c === 'string' && c.length > 0)
-      )
-    ),
+    availableCategories,
 
     selectedCountries,
     setSelectedCountries,
@@ -182,10 +353,9 @@ const useMarketplace = (id?: string): UseMarketplace => {
 
     projects,
     setProjects,
-
     project,
-    handleRetire,
 
+    handleRetire,
     prices,
     isPricesLoading,
   };
