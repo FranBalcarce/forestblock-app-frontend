@@ -1,40 +1,36 @@
 import { useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
 import { Project } from '@/types/project';
 import { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
+import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
 /**
- * Backend base URL
- * - Local: http://localhost:5000
- * - Prod: https://tu-backend.com
- */
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-
-/**
- * Endpoints reales según tu backend (Express)
+ * Endpoints del backend (Express)
+ * baseURL viene de NEXT_PUBLIC_API_BASE_URL
  */
 const ENDPOINTS = {
-  projects: `${API_BASE}/api/carbon/carbonProjects`,
-  projectById: (id: string) => `${API_BASE}/api/carbon/carbonProjects/${encodeURIComponent(id)}`,
-  prices: `${API_BASE}/api/carbon/prices`,
+  projects: '/api/carbon/carbonProjects',
+  projectById: (id: string) => `/api/carbon/carbonProjects/${encodeURIComponent(id)}`,
+  prices: '/api/carbon/prices',
 };
 
 const useMarketplace = (id?: string): UseMarketplace => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [prices, setPrices] = useState<Price[]>([]);
+
   const [loading, setLoading] = useState<boolean>(true);
   const [isPricesLoading, setIsPricesLoading] = useState<boolean>(true);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('price_asc');
+
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
   /* =========================
-     FETCH PROJECTS (LIST)
+     FETCH PROJECTS (LISTADO)
   ========================== */
   useEffect(() => {
     if (id) return;
@@ -42,10 +38,12 @@ const useMarketplace = (id?: string): UseMarketplace => {
     const fetchProjects = async () => {
       try {
         setLoading(true);
-        const { data } = await axios.get<Project[]>(ENDPOINTS.projects);
+
+        const res = await axiosPublicInstance.get<Project[]>(ENDPOINTS.projects);
+        const data = res.data ?? [];
 
         setProjects(
-          data.map((p) => ({
+          data.map((p: Project) => ({
             ...p,
             images: p.images ?? [],
             description: p.short_description || p.description || 'No description available',
@@ -72,7 +70,9 @@ const useMarketplace = (id?: string): UseMarketplace => {
     const fetchProject = async () => {
       try {
         setLoading(true);
-        const { data } = await axios.get<Project>(ENDPOINTS.projectById(id));
+
+        const res = await axiosPublicInstance.get<Project>(ENDPOINTS.projectById(id));
+        const data = res.data;
 
         setProject({
           ...data,
@@ -98,8 +98,8 @@ const useMarketplace = (id?: string): UseMarketplace => {
     const fetchPrices = async () => {
       try {
         setIsPricesLoading(true);
-        const { data } = await axios.get<Price[]>(ENDPOINTS.prices);
-        setPrices(data);
+        const res = await axiosPublicInstance.get<Price[]>(ENDPOINTS.prices);
+        setPrices(res.data ?? []);
       } catch (err) {
         console.error('Error fetching prices', err);
       } finally {
@@ -125,7 +125,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
     }
 
     if (selectedCategories.length) {
-      list = list.filter((p) => selectedCategories.includes(p.category || ''));
+      list = list.filter((p) => selectedCategories.includes(p.category ?? ''));
     }
 
     if (selectedVintages.length) {
@@ -133,27 +133,31 @@ const useMarketplace = (id?: string): UseMarketplace => {
     }
 
     if (sortBy === 'price_asc') {
-      list.sort((a, b) => Number(a.displayPrice || 0) - Number(b.displayPrice || 0));
+      list.sort((a, b) => Number(a.displayPrice ?? 0) - Number(b.displayPrice ?? 0));
     }
 
     if (sortBy === 'price_desc') {
-      list.sort((a, b) => Number(b.displayPrice || 0) - Number(a.displayPrice || 0));
+      list.sort((a, b) => Number(b.displayPrice ?? 0) - Number(a.displayPrice ?? 0));
     }
 
     return list;
   }, [projects, searchTerm, selectedCountries, selectedCategories, selectedVintages, sortBy]);
 
   /* =========================
-     HANDLE RETIRE (BUY)
+     HANDLE BUY / RETIRE
   ========================== */
   const handleRetire = (params: RetireParams) => {
     console.log('RETIRE / BUY:', params);
-    // acá va tu flujo real de compra
+    // Acá va el flujo real (checkout / retiro)
   };
 
+  /* =========================
+     RETURN
+  ========================== */
   return {
     filteredProjects,
     loading,
+
     availableCategories: Array.from(
       new Set(
         projects
@@ -170,14 +174,18 @@ const useMarketplace = (id?: string): UseMarketplace => {
     setSelectedVintages,
     selectedUNSDG,
     setSelectedUNSDG,
+
     searchTerm,
     setSearchTerm,
     sortBy,
     setSortBy,
+
     projects,
     setProjects,
+
     project,
     handleRetire,
+
     prices,
     isPricesLoading,
   };
