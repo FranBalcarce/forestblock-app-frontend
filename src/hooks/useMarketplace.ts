@@ -1,20 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Project } from '@/types/project';
-import { UseMarketplace, RetireParams } from '@/types/marketplace';
+import { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
-/**
- * Endpoints según tu backend Express:
- * server.js -> app.use("/api", apiRoutes)
- * index.js -> router.use("/carbon", carbonRoutes)
- */
 const ENDPOINTS = {
   projects: '/api/carbon/carbonProjects',
   projectById: (id: string) => `/api/carbon/carbonProjects/${encodeURIComponent(id)}`,
   prices: '/api/carbon/prices',
 };
 
-/** Helpers sin `any` */
 type RecordUnknown = Record<string, unknown>;
 
 function isRecord(v: unknown): v is RecordUnknown {
@@ -28,13 +22,6 @@ function unwrapArray<T = unknown>(payload: unknown): T[] {
   return [];
 }
 
-/**
- * Saca projectId/key desde el objeto "price" aunque cambie el shape
- * - listing.creditId.projectId
- * - carbonPool.creditId.projectId
- * - listing.project.key (fallback)
- * - projectId (fallback)
- */
 function getProjectKeyFromPrice(pr: unknown): string | undefined {
   if (!isRecord(pr)) return undefined;
 
@@ -58,22 +45,14 @@ function getProjectKeyFromPrice(pr: unknown): string | undefined {
   return undefined;
 }
 
-/**
- * Lee un precio numérico desde el objeto "price" aunque cambie el shape
- * - purchasePrice (number)
- * - baseUnitPrice (number)
- * - listing.singleUnitPrice (string -> number)
- */
 function getNumericPriceFromPrice(pr: unknown): number | null {
   if (!isRecord(pr)) return null;
 
-  if (typeof pr.purchasePrice === 'number' && Number.isFinite(pr.purchasePrice)) {
+  if (typeof pr.purchasePrice === 'number' && Number.isFinite(pr.purchasePrice))
     return pr.purchasePrice;
-  }
 
-  if (typeof pr.baseUnitPrice === 'number' && Number.isFinite(pr.baseUnitPrice)) {
+  if (typeof pr.baseUnitPrice === 'number' && Number.isFinite(pr.baseUnitPrice))
     return pr.baseUnitPrice;
-  }
 
   const listing = pr.listing;
   if (isRecord(listing) && typeof listing.singleUnitPrice === 'string') {
@@ -84,9 +63,6 @@ function getNumericPriceFromPrice(pr: unknown): number | null {
   return null;
 }
 
-/**
- * Devuelve el mínimo precio encontrado para un projectKey (string con 2 decimales)
- */
 function computeDisplayPriceForProject(
   projectKey: string,
   pricesRaw: unknown[]
@@ -104,10 +80,6 @@ function computeDisplayPriceForProject(
   return min == null ? undefined : min.toFixed(2);
 }
 
-/**
- * Normaliza un proyecto sin tocar imágenes:
- * - description / displayPrice / selectedVintage
- */
 function normalizeProject(p: Project, pricesRaw: unknown[]): Project {
   const displayFromPrices = computeDisplayPriceForProject(p.key, pricesRaw);
 
@@ -124,7 +96,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
 
-  // prices como unknown[] para no romper si Carbonmark cambia el shape
+  // lo guardamos como unknown[] para soportar cambios de shape sin romper el build
   const [prices, setPrices] = useState<unknown[]>([]);
 
   const [loading, setLoading] = useState<boolean>(true);
@@ -169,7 +141,6 @@ const useMarketplace = (id?: string): UseMarketplace => {
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
         const list = unwrapArray<Project>(res.data);
 
-        // normalizamos usando prices (si ya llegaron)
         setProjects(list.map((p) => normalizeProject(p, prices)));
       } catch (err) {
         console.error('Error fetching projects', err);
@@ -192,8 +163,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
       try {
         setLoading(true);
         const res = await axiosPublicInstance.get<Project>(ENDPOINTS.projectById(id));
-        const data = res.data;
-        setProject(normalizeProject(data, prices));
+        setProject(normalizeProject(res.data, prices));
       } catch (err) {
         console.error('Error fetching project', err);
         setProject(null);
@@ -228,8 +198,6 @@ const useMarketplace = (id?: string): UseMarketplace => {
       list = list.filter((p) => p.vintages?.some((v) => selectedVintages.includes(v)));
     }
 
-    // (si querés filtrar por ODS, acá es donde va, pero no lo toco porque no me pasaste esa lógica)
-
     if (sortBy === 'price_asc') {
       list.sort((a, b) => Number(a.displayPrice ?? 0) - Number(b.displayPrice ?? 0));
     }
@@ -245,7 +213,6 @@ const useMarketplace = (id?: string): UseMarketplace => {
      HANDLE RETIRE (BUY)
   ========================== */
   const handleRetire = (params: RetireParams) => {
-    // Acá va tu flujo real de compra/retire
     console.log('RETIRE / BUY:', params);
   };
 
@@ -280,10 +247,8 @@ const useMarketplace = (id?: string): UseMarketplace => {
 
     handleRetire,
 
-    // OJO: tu tipo dice Price[] pero acá devolvemos unknown[]
-    // Esto es apropósito para que no se rompa por cambios del API.
-    // Si querés, después lo tipamos fino cuando me pegues 1 item real de /prices.
-    prices: prices as unknown as any,
+    // tip para tu UI: lo casteamos a Price[] para que no rompa tu UseMarketplace
+    prices: prices as unknown as Price[],
     isPricesLoading,
   };
 };
