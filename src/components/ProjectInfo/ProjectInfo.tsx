@@ -78,9 +78,11 @@ export default function ProjectInfo({
   const mapCoords = useMemo<[number, number] | null>(() => {
     const coords = project.location?.geometry?.coordinates;
     if (!coords || coords.length < 2) return null;
+
     const lng = Number(coords[0]);
     const lat = Number(coords[1]);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
     return [lat, lng];
   }, [project]);
 
@@ -96,6 +98,8 @@ export default function ProjectInfo({
       selectedVintage,
     });
   };
+
+  const canBuy = !isPricesLoading && (matches?.length ?? 0) > 0;
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-6 md:py-10">
@@ -133,7 +137,7 @@ export default function ProjectInfo({
 
           {/* Botón comprar/retirar */}
           <div className="mt-6 flex flex-wrap gap-3">
-            <Button disabled={isPricesLoading || !(matches?.length > 0)} onClick={onBuy}>
+            <Button variant="quaternary" isDisabled={!canBuy} onClick={onBuy}>
               {isPricesLoading ? 'Cargando precios...' : 'Comprar / Retirar'}
             </Button>
           </div>
