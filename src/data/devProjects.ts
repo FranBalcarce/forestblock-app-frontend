@@ -1,68 +1,69 @@
-export type DevProjectStage = 'Piloto' | 'Fase 1';
+// src/data/devProjects.ts
 
 export type DevProject = {
   key: string;
   name: string;
-  image: string; // ruta en /public
+  image: string;
   country: string;
   year: number;
   tipo: string;
-  stage: DevProjectStage;
-
-  // para la tarjeta/listado
+  stage: 'Piloto' | 'Fase 1';
   shortDescription: string;
-
-  // para el detalle
-  longDescription: string;
-
-  // mapa
+  description: string;
   location: {
-    label: string; // texto tipo "Santiago del Estero, Argentina"
-    coordinates: [number, number]; // [lat, lng]
+    lat: number;
+    lng: number;
+    label: string;
   };
 };
 
 export const DEV_PROJECTS: DevProject[] = [
   {
-    key: 'nf-romeral-001',
-    name: 'Proyecto Romeral',
-    image: '/images/new-feature/romeral.png', // ✅ poné la imagen acá
+    key: 'nf-romeral',
+    name: 'Proyecto El Romeral',
+    image: '/images/dev/romeral.jpg', // poné la imagen acá
     country: 'Argentina',
     year: 2025,
-    tipo: 'Forestry',
+    tipo: 'Forestry / REDD+',
     stage: 'Piloto',
     shortDescription:
       'Proyecto forestal enfocado en captura de carbono mediante restauración de bosque nativo.',
-    longDescription:
-      `Proyecto Romeral es una iniciativa forestal orientada a la captura de carbono mediante acciones de restauración y manejo sostenible de ecosistemas de bosque nativo.\n\n` +
-      `El proyecto busca generar impacto climático medible a través de actividades de conservación, monitoreo y gestión territorial, con enfoque en co-beneficios ambientales y sociales.\n\n` +
-      `Actualmente se encuentra en etapa Piloto, priorizando validación técnica, levantamiento de línea base y definición del plan operativo.`,
+    description: `
+Proyecto REDD+ / ARR / IFM ubicado en El Copo, Santiago del Estero.
+
+El proyecto combina conservación, restauración y silvopastoreo integrado,
+con un horizonte operativo de 40 años y un fuerte impacto en captura de CO₂.
+
+VCUs estimados: ~880.000 en 10 años.
+Precio estimado: USD 18–22 / VCU.
+    `,
     location: {
-      label: 'Santiago del Estero, Argentina',
-      // del doc: “Coordenadas aproximadas: -25.8°S, -64.2°W”
-      coordinates: [-25.8, -64.2],
+      lat: -25.9,
+      lng: -62.7,
+      label: 'El Copo, Santiago del Estero',
     },
   },
   {
-    key: 'nf-ente-rionegro-002',
-    name: 'ENTE Río Negro',
-    image: '/images/new-feature/ente.jpg', // ✅ poné la imagen acá
+    key: 'nf-ente-rn',
+    name: 'ENTE Río Negro – Ganadería Regenerativa',
+    image: '/images/dev/ente-rn.jpg', // poné la imagen acá
     country: 'Argentina',
-    year: 2025,
-    tipo: 'Eficiencia energética',
+    year: 2026,
+    tipo: 'Eficiencia energética / ALM',
     stage: 'Fase 1',
-    shortDescription:
-      'Proyecto de eficiencia energética y reducción de emisiones en infraestructura pública.',
-    longDescription:
-      `ENTE Río Negro es un proyecto de eficiencia energética orientado a reducir consumos y emisiones en infraestructura pública a través de mejoras técnicas y optimización operativa.\n\n` +
-      `Incluye diagnóstico, priorización de medidas, implementación de mejoras (equipamiento, gestión energética, etc.) y monitoreo de resultados para demostrar reducción de emisiones.\n\n` +
-      `Actualmente se encuentra en Fase 1, enfocada en definición del alcance, relevamiento inicial y planificación de la implementación.`,
+    shortDescription: 'Proyecto de ganadería regenerativa y manejo de suelos en la Patagonia.',
+    description: `
+Proyecto ALM (Improved Agricultural Land Management) en la Región Sur de Río Negro.
+
+Busca regenerar pastizales naturales degradados y aumentar el stock de carbono
+en suelos mediante prácticas ganaderas sostenibles.
+
+Área inicial: 10.000 ha (piloto).
+    `,
     location: {
-      label: 'Río Negro, Argentina',
-      // del doc: “Coordenadas aproximadas: -41.5°S, -66.5°W”
-      coordinates: [-41.5, -66.5],
+      lat: -41.5,
+      lng: -66.5,
+      label: 'Región Sur, Río Negro',
     },
   },
 ];
-
-export const getDevProjectById = (id: string) => DEV_PROJECTS.find((p) => p.key === id);
