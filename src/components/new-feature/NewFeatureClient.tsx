@@ -4,32 +4,48 @@ import React, { useMemo, useState } from 'react';
 import type { Project } from '@/types/project';
 import Header from '@/components/new-feature/header';
 import dynamic from 'next/dynamic';
+import { DEV_PROJECTS } from '@/data/devProjects';
 
 // 👇 Cargar ProjectList solo en el cliente (por Leaflet)
 const ProjectList = dynamic(() => import('@/components/Marketplace/ProjectList'), { ssr: false });
 
-type ProjectMinimal = {
-  key: string;
-  name: string;
-  images: string[];
-  location: { geometry: { coordinates: [number, number] } };
-  fase: 'Piloto' | 'Fase 1';
-  tipo: 'Blue carbon' | 'Eficiencia energética';
-};
-
-function toFullProject(p: ProjectMinimal): Project {
+function toFullProject(p: (typeof DEV_PROJECTS)[number]): Project {
+  // Adaptamos DevProject -> Project (mínimo necesario para ProjectList)
   const partial = {
     key: p.key,
     name: p.name,
-    images: p.images.map((url) => ({ url })),
+
+    // ✅ Card del listado: usamos cardImage
+    images: [{ url: p.cardImage }],
+
+    // algunos componentes del marketplace usan coverImage
+    coverImage: { url: p.cardImage },
+
+    // país
+    country: p.country,
+
+    // para que no explote nada
+    price: '0',
+    displayPrice: '0',
+
+    // descripción
+    short_description: p.shortDescription,
+    description: p.description,
+
+    // category viene desde methodologies[0].category en tu getProjectImage
+    methodologies: [{ category: p.tipo }],
+
+    // location para el mapa (si ProjectList la usa)
     location: {
       type: 'Point',
-      geometry: p.location.geometry,
+      geometry: {
+        // OJO: GeoJSON es [lng, lat]
+        coordinates: [p.location.lng, p.location.lat],
+      },
     },
-    price: '0',
-    country: '—',
+
+    // defaults
     vintages: [] as number[],
-    methodologies: [{ category: p.tipo }],
     sustainableDevelopmentGoals: [],
   } as unknown as Project;
 
@@ -41,49 +57,42 @@ const NewFeatureClient: React.FC = () => {
   const [sortBy, setSortBy] = useState<string>('relevance');
   const [loading] = useState<boolean>(false);
 
-  const [faseFilter, setFaseFilter] = useState<'todas' | 'Piloto' | 'Fase 1'>('todas');
-  const [tipoFilter, setTipoFilter] = useState<'todos' | 'Blue carbon' | 'Eficiencia energética'>(
-    'todos'
-  );
+  // Filtros
+  const [faseFilter, setFaseFilter] = useState<string>('todas');
+  const [tipoFilter, setTipoFilter] = useState<string>('todos');
 
-  const projectsMinimal: ProjectMinimal[] = useMemo(
-    () => [
-      {
-        key: 'nf-azul-001',
-        name: 'Captura Azul (Blue Carbon) – Piloto',
-        images: ['/images/projects/blue-carbon.jpg'],
-        location: { geometry: { coordinates: [-60.0, -36.5] } },
-        fase: 'Piloto',
-        tipo: 'Blue carbon',
-      },
-      {
-        key: 'nf-eff-002',
-        name: 'Eficiencia Energética PyME – Fase 1',
-        images: ['/images/projects/eficiencia.jpg'],
-        location: { geometry: { coordinates: [-65.0, -43.1] } },
-        fase: 'Fase 1',
-        tipo: 'Eficiencia energética',
-      },
-    ],
-    []
-  );
+  const fases = useMemo(() => {
+    const unique = Array.from(new Set(DEV_PROJECTS.map((p) => p.stage)));
+    // “todas” primero
+    return ['todas', ...unique];
+  }, []);
 
-  const filteredMinimal = useMemo(() => {
+  const tipos = useMemo(() => {
+    const unique = Array.from(new Set(DEV_PROJECTS.map((p) => p.tipo)));
+    return ['todos', ...unique];
+  }, []);
+
+  const filteredDev = useMemo(() => {
     const t = searchTerm.trim().toLowerCase();
 
-    return projectsMinimal.filter((p) => {
-      const matchesSearch = !t || p.name.toLowerCase().includes(t);
-      const matchesFase = faseFilter === 'todas' || p.fase === faseFilter;
+    return DEV_PROJECTS.filter((p) => {
+      const matchesSearch =
+        !t ||
+        p.name.toLowerCase().includes(t) ||
+        p.tipo.toLowerCase().includes(t) ||
+        p.stage.toLowerCase().includes(t) ||
+        p.shortDescription.toLowerCase().includes(t);
+
+      const matchesFase = faseFilter === 'todas' || p.stage === faseFilter;
       const matchesTipo = tipoFilter === 'todos' || p.tipo === tipoFilter;
 
       return matchesSearch && matchesFase && matchesTipo;
     });
-  }, [projectsMinimal, searchTerm, faseFilter, tipoFilter]);
+  }, [searchTerm, faseFilter, tipoFilter]);
 
-  const filtered: Project[] = useMemo(() => filteredMinimal.map(toFullProject), [filteredMinimal]);
+  const filtered: Project[] = useMemo(() => filteredDev.map(toFullProject), [filteredDev]);
 
-  // ❌ Antes renderizaba un botón vacío dentro de cada card
-  // ✔ Ahora no renderiza nada
+  // ✅ ya sin botón dentro de cada card
   const actionRenderer = () => null;
 
   return (
@@ -94,10 +103,11 @@ const NewFeatureClient: React.FC = () => {
         <aside className="bg-white rounded-3xl p-4 shadow-sm">
           <h2 className="text-lg font-semibold mb-4">Filtrar por:</h2>
 
+          {/* FASE */}
           <div className="mb-4">
             <span className="block text-sm font-medium mb-2">Fase del proyecto</span>
             <div className="flex flex-col gap-2">
-              {(['todas', 'Piloto', 'Fase 1'] as const).map((fase) => (
+              {fases.map((fase) => (
                 <button
                   key={fase}
                   type="button"
@@ -114,10 +124,11 @@ const NewFeatureClient: React.FC = () => {
             </div>
           </div>
 
+          {/* TIPO */}
           <div className="mb-2">
             <span className="block text-sm font-medium mb-2">Tipo de proyecto</span>
             <div className="flex flex-col gap-2">
-              {(['todos', 'Blue carbon', 'Eficiencia energética'] as const).map((tipo) => (
+              {tipos.map((tipo) => (
                 <button
                   key={tipo}
                   type="button"
@@ -141,7 +152,7 @@ const NewFeatureClient: React.FC = () => {
           sortBy={sortBy}
           setSortBy={setSortBy}
           openFilters={() => {}}
-          actionRenderer={actionRenderer} // 👈 ya sin botón
+          actionRenderer={actionRenderer}
         />
       </div>
     </div>

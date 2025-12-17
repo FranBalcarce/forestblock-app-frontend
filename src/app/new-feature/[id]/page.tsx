@@ -7,6 +7,24 @@ import Image from 'next/image';
 import { DEV_PROJECTS } from '@/data/devProjects';
 import MapView from '@/components/ProjectInfo/MapView';
 
+function Section({ title, items }: { title: string; items?: string[] }) {
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div className="py-5 border-t border-black/5">
+      <h3 className="text-base font-semibold mb-3">{title}</h3>
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-2 text-sm text-black/75">
+        {items.map((x) => (
+          <li key={x} className="flex gap-2">
+            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-forestGreen/80 shrink-0" />
+            <span>{x}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function DevProjectDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -27,7 +45,6 @@ export default function DevProjectDetailPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 md:py-10">
-      {/* Volver */}
       <button
         onClick={() => router.back()}
         className="mb-4 inline-flex items-center gap-2 rounded-full bg-black/5 px-3 py-1.5 text-sm hover:bg-black/10 transition"
@@ -39,7 +56,7 @@ export default function DevProjectDetailPage() {
       <div className="mb-10 rounded-3xl overflow-hidden relative">
         <div className="relative h-64 md:h-80">
           <Image
-            src={project.image}
+            src={project.bannerImage}
             alt={project.name}
             fill
             priority
@@ -70,16 +87,65 @@ export default function DevProjectDetailPage() {
 
       {/* CONTENIDO */}
       <div className="grid grid-cols-1 md:grid-cols-[2fr_1.2fr] gap-10">
-        {/* Descripción */}
+        {/* Izquierda */}
         <section>
           <h2 className="text-xl font-semibold mb-4">Descripción del proyecto</h2>
           <p className="text-black/80 leading-relaxed whitespace-pre-line">{project.description}</p>
 
-          {/* MAPA */}
-          <div className="mt-8">
-            <h3 className="text-lg font-semibold mb-3">Ubicación</h3>
+          {(project.highlights?.length ||
+            project.activities?.length ||
+            project.impacts?.length ||
+            project.certifications?.length ||
+            project.stakeholders?.length ||
+            project.nextSteps?.length) && (
+            <div className="mt-8 rounded-3xl bg-white border border-black/5 shadow-sm px-6">
+              <div className="py-5">
+                <h3 className="text-lg font-semibold">Más información</h3>
+                <p className="text-sm text-black/60 mt-1">
+                  Resumen de puntos clave y próximos pasos del proyecto.
+                </p>
+              </div>
 
-            <div className="h-80 rounded-2xl overflow-hidden border border-black/5">
+              <Section title="Puntos clave" items={project.highlights} />
+              <Section title="Actividades principales" items={project.activities} />
+              <Section title="Impacto esperado" items={project.impacts} />
+              <Section title="Certificación / verificación" items={project.certifications} />
+              <Section title="Actores / beneficiarios" items={project.stakeholders} />
+              <Section title="Próximos pasos" items={project.nextSteps} />
+            </div>
+          )}
+        </section>
+
+        {/* Derecha */}
+        <aside className="h-fit space-y-5">
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-black/5">
+            <h3 className="text-lg font-semibold mb-2">¿Te interesa este proyecto?</h3>
+
+            <p className="text-sm text-black/70 mb-6">
+              Completá el formulario y el equipo de Forestblock se va a poner en contacto para
+              brindarte más información.
+            </p>
+
+            <button
+              onClick={() => router.push('https://www.forestblock.tech/contact/contacto')}
+              className="w-full rounded-full px-4 py-2 bg-forestGreen text-white text-sm font-medium hover:bg-forestGreen/90 transition"
+            >
+              Contactar equipo
+            </button>
+
+            <button
+              onClick={() => router.push('/new-feature')}
+              className="mt-4 text-sm text-forestGreen underline"
+            >
+              Volver a proyectos en desarrollo
+            </button>
+          </div>
+
+          {/* MAPA abajo del CTA */}
+          <div className="bg-white rounded-3xl p-5 shadow-sm border border-black/5">
+            <h3 className="text-base font-semibold mb-3">Ubicación</h3>
+
+            <div className="aspect-square w-full rounded-2xl overflow-hidden border border-black/5">
               <MapView
                 projectLocations={[
                   {
@@ -89,31 +155,9 @@ export default function DevProjectDetailPage() {
                 ]}
               />
             </div>
+
+            <div className="mt-3 text-sm text-black/70">{project.location.label}</div>
           </div>
-        </section>
-
-        {/* CTA */}
-        <aside className="bg-white rounded-3xl p-6 shadow-sm border border-black/5 h-fit">
-          <h3 className="text-lg font-semibold mb-2">¿Te interesa este proyecto?</h3>
-
-          <p className="text-sm text-black/70 mb-6">
-            Completá el formulario y el equipo de Forestblock se va a poner en contacto para
-            brindarte más información.
-          </p>
-
-          <button
-            onClick={() => router.push('https://www.forestblock.tech/contact/contacto')}
-            className="w-full rounded-full px-4 py-2 bg-forestGreen text-white text-sm font-medium hover:bg-forestGreen/90 transition"
-          >
-            Contactar equipo
-          </button>
-
-          <button
-            onClick={() => router.push('/new-feature')}
-            className="mt-4 text-sm text-forestGreen underline"
-          >
-            Volver a proyectos en desarrollo
-          </button>
         </aside>
       </div>
     </div>
