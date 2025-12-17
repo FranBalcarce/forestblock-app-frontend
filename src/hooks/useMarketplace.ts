@@ -4,9 +4,9 @@ import { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
 const ENDPOINTS = {
-  projects: '/api/carbon/carbonProjects',
-  projectById: (id: string) => `/api/carbon/carbonProjects/${encodeURIComponent(id)}`,
-  prices: '/api/carbon/prices',
+  projects: '/carbon/carbonProjects',
+  projectById: (id: string) => `/carbon/carbonProjects/${encodeURIComponent(id)}`,
+  prices: '/carbon/prices',
 };
 
 type RecordUnknown = Record<string, unknown>;
