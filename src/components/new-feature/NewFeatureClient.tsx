@@ -4,74 +4,36 @@ import React, { useMemo, useState } from 'react';
 import type { Project } from '@/types/project';
 import Header from '@/components/new-feature/header';
 import dynamic from 'next/dynamic';
+
 import { DEV_PROJECTS } from '@/data/devProjects';
+import { toMarketplaceProject } from '@/utils/toMarketplaceProject';
 
-// 👇 Cargar ProjectList solo en el cliente (por Leaflet)
 const ProjectList = dynamic(() => import('@/components/Marketplace/ProjectList'), { ssr: false });
-
-function toFullProject(p: (typeof DEV_PROJECTS)[number]): Project {
-  // Adaptamos DevProject -> Project (mínimo necesario para ProjectList)
-  const partial = {
-    key: p.key,
-    name: p.name,
-
-    // ✅ Card del listado: usamos cardImage
-    images: [{ url: p.cardImage }],
-
-    // algunos componentes del marketplace usan coverImage
-    coverImage: { url: p.cardImage },
-
-    // país
-    country: p.country,
-
-    // para que no explote nada
-    price: '0',
-    displayPrice: '0',
-
-    // descripción
-    short_description: p.shortDescription,
-    description: p.description,
-
-    // category viene desde methodologies[0].category en tu getProjectImage
-    methodologies: [{ category: p.tipo }],
-
-    // location para el mapa (si ProjectList la usa)
-    location: {
-      type: 'Point',
-      geometry: {
-        // OJO: GeoJSON es [lng, lat]
-        coordinates: [p.location.lng, p.location.lat],
-      },
-    },
-
-    // defaults
-    vintages: [] as number[],
-    sustainableDevelopmentGoals: [],
-  } as unknown as Project;
-
-  return partial;
-}
 
 const NewFeatureClient: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<string>('relevance');
   const [loading] = useState<boolean>(false);
 
-  // Filtros
-  const [faseFilter, setFaseFilter] = useState<string>('todas');
-  const [tipoFilter, setTipoFilter] = useState<string>('todos');
+  // 🔹 filtros
+  const [faseFilter, setFaseFilter] = useState<'todas' | 'Piloto' | 'Fase 1'>('todas');
 
-  const fases = useMemo(() => {
-    const unique = Array.from(new Set(DEV_PROJECTS.map((p) => p.stage)));
-    // “todas” primero
-    return ['todas', ...unique];
-  }, []);
+  const [tipoFilter, setTipoFilter] = useState<'todos' | 'Forestry' | 'Eficiencia energética'>(
+    'todos'
+  );
 
-  const tipos = useMemo(() => {
-    const unique = Array.from(new Set(DEV_PROJECTS.map((p) => p.tipo)));
-    return ['todos', ...unique];
-  }, []);
+  const [countryFilter, setCountryFilter] = useState<'todos' | string>('todos');
+  const [yearFilter, setYearFilter] = useState<'todos' | number>('todos');
 
+  // 🔹 valores únicos (para botones)
+  const countries = useMemo(() => Array.from(new Set(DEV_PROJECTS.map((p) => p.country))), []);
+
+  const years = useMemo(
+    () => Array.from(new Set(DEV_PROJECTS.map((p) => p.year))).sort((a, b) => b - a),
+    []
+  );
+
+  // 🔹 filtrado principal
   const filteredDev = useMemo(() => {
     const t = searchTerm.trim().toLowerCase();
 
@@ -80,70 +42,91 @@ const NewFeatureClient: React.FC = () => {
         !t ||
         p.name.toLowerCase().includes(t) ||
         p.tipo.toLowerCase().includes(t) ||
-        p.stage.toLowerCase().includes(t) ||
-        p.shortDescription.toLowerCase().includes(t);
+        p.stage.toLowerCase().includes(t);
 
       const matchesFase = faseFilter === 'todas' || p.stage === faseFilter;
+
       const matchesTipo = tipoFilter === 'todos' || p.tipo === tipoFilter;
 
-      return matchesSearch && matchesFase && matchesTipo;
+      const matchesCountry = countryFilter === 'todos' || p.country === countryFilter;
+
+      const matchesYear = yearFilter === 'todos' || p.year === yearFilter;
+
+      return matchesSearch && matchesFase && matchesTipo && matchesCountry && matchesYear;
     });
-  }, [searchTerm, faseFilter, tipoFilter]);
+  }, [searchTerm, faseFilter, tipoFilter, countryFilter, yearFilter]);
 
-  const filtered: Project[] = useMemo(() => filteredDev.map(toFullProject), [filteredDev]);
-
-  // ✅ ya sin botón dentro de cada card
-  const actionRenderer = () => null;
+  const filtered: Project[] = useMemo(
+    () => filteredDev.map(toMarketplaceProject) as unknown as Project[],
+    [filteredDev]
+  );
 
   return (
     <div className="flex flex-col gap-8">
       <Header searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[280px,1fr] gap-8 mt-4">
+        {/* SIDEBAR */}
         <aside className="bg-white rounded-3xl p-4 shadow-sm">
           <h2 className="text-lg font-semibold mb-4">Filtrar por:</h2>
 
           {/* FASE */}
-          <div className="mb-4">
-            <span className="block text-sm font-medium mb-2">Fase del proyecto</span>
-            <div className="flex flex-col gap-2">
-              {fases.map((fase) => (
-                <button
-                  key={fase}
-                  type="button"
-                  onClick={() => setFaseFilter(fase)}
-                  className={`text-sm text-left px-3 py-2 rounded-full border ${
-                    faseFilter === fase
-                      ? 'bg-mintGreen/20 border-mintGreen text-forestGreen'
-                      : 'border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  {fase === 'todas' ? 'Todas las fases' : fase}
-                </button>
-              ))}
-            </div>
-          </div>
+          <FilterSection title="Fase del proyecto">
+            {(['todas', 'Piloto', 'Fase 1'] as const).map((fase) => (
+              <FilterButton
+                key={fase}
+                active={faseFilter === fase}
+                onClick={() => setFaseFilter(fase)}
+                label={fase === 'todas' ? 'Todas las fases' : fase}
+              />
+            ))}
+          </FilterSection>
 
           {/* TIPO */}
-          <div className="mb-2">
-            <span className="block text-sm font-medium mb-2">Tipo de proyecto</span>
-            <div className="flex flex-col gap-2">
-              {tipos.map((tipo) => (
-                <button
-                  key={tipo}
-                  type="button"
-                  onClick={() => setTipoFilter(tipo)}
-                  className={`text-sm text-left px-3 py-2 rounded-full border ${
-                    tipoFilter === tipo
-                      ? 'bg-mintGreen/20 border-mintGreen text-forestGreen'
-                      : 'border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  {tipo === 'todos' ? 'Todos' : tipo}
-                </button>
-              ))}
-            </div>
-          </div>
+          <FilterSection title="Tipo de proyecto">
+            {(['todos', 'Forestry', 'Eficiencia energética'] as const).map((tipo) => (
+              <FilterButton
+                key={tipo}
+                active={tipoFilter === tipo}
+                onClick={() => setTipoFilter(tipo)}
+                label={tipo === 'todos' ? 'Todos' : tipo}
+              />
+            ))}
+          </FilterSection>
+
+          {/* PAÍS */}
+          <FilterSection title="País">
+            <FilterButton
+              active={countryFilter === 'todos'}
+              onClick={() => setCountryFilter('todos')}
+              label="Todos"
+            />
+            {countries.map((c) => (
+              <FilterButton
+                key={c}
+                active={countryFilter === c}
+                onClick={() => setCountryFilter(c)}
+                label={c}
+              />
+            ))}
+          </FilterSection>
+
+          {/* AÑO */}
+          <FilterSection title="Año">
+            <FilterButton
+              active={yearFilter === 'todos'}
+              onClick={() => setYearFilter('todos')}
+              label="Todos"
+            />
+            {years.map((y) => (
+              <FilterButton
+                key={y}
+                active={yearFilter === y}
+                onClick={() => setYearFilter(y)}
+                label={String(y)}
+              />
+            ))}
+          </FilterSection>
         </aside>
 
         <ProjectList
@@ -152,7 +135,6 @@ const NewFeatureClient: React.FC = () => {
           sortBy={sortBy}
           setSortBy={setSortBy}
           openFilters={() => {}}
-          actionRenderer={actionRenderer}
         />
       </div>
     </div>
@@ -160,6 +142,37 @@ const NewFeatureClient: React.FC = () => {
 };
 
 export default NewFeatureClient;
+
+/* ----------------- helpers UI ----------------- */
+
+const FilterSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <div className="mb-4">
+    <span className="block text-sm font-medium mb-2">{title}</span>
+    <div className="flex flex-col gap-2">{children}</div>
+  </div>
+);
+
+const FilterButton = ({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`text-sm text-left px-3 py-2 rounded-full border ${
+      active
+        ? 'bg-mintGreen/20 border-mintGreen text-forestGreen'
+        : 'border-gray-200 hover:bg-gray-50'
+    }`}
+  >
+    {label}
+  </button>
+);
 
 // Este tiene el login
 // 'use client';
