@@ -1,4 +1,3 @@
-// src/app/new-feature/page.tsx
 import { Suspense } from 'react';
 import NewFeatureClient from '@/components/new-feature/NewFeatureClient';
 

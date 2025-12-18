@@ -87,17 +87,17 @@ export default function DevProjectDetailPage() {
 
       {/* CONTENIDO */}
       <div className="grid grid-cols-1 md:grid-cols-[2fr_1.2fr] gap-10">
-        {/* Izquierda */}
         <section>
           <h2 className="text-xl font-semibold mb-4">Descripción del proyecto</h2>
           <p className="text-black/80 leading-relaxed whitespace-pre-line">{project.description}</p>
 
-          {(project.highlights?.length ||
-            project.activities?.length ||
-            project.impacts?.length ||
-            project.certifications?.length ||
-            project.stakeholders?.length ||
-            project.nextSteps?.length) && (
+          {/* Más información */}
+          {project.highlights?.length ||
+          project.activities?.length ||
+          project.impacts?.length ||
+          project.certifications?.length ||
+          project.stakeholders?.length ||
+          project.nextSteps?.length ? (
             <div className="mt-8 rounded-3xl bg-white border border-black/5 shadow-sm px-6">
               <div className="py-5">
                 <h3 className="text-lg font-semibold">Más información</h3>
@@ -113,10 +113,9 @@ export default function DevProjectDetailPage() {
               <Section title="Actores / beneficiarios" items={project.stakeholders} />
               <Section title="Próximos pasos" items={project.nextSteps} />
             </div>
-          )}
+          ) : null}
         </section>
 
-        {/* Derecha */}
         <aside className="h-fit space-y-5">
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-black/5">
             <h3 className="text-lg font-semibold mb-2">¿Te interesa este proyecto?</h3>
