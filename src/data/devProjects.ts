@@ -1,14 +1,13 @@
-// src/data/devProjects.ts
-
 export type DevProject = {
   key: string;
   name: string;
 
-  // ✅ dos imágenes: card y banner
-  cardImage: string;
-  bannerImage: string;
+  // ✅ NUEVO: 2 imágenes
+  cardImage: string; // cuadrada (para cards)
+  bannerImage: string; // banner (para detalle)
 
   country: string;
+  countryCode: string; // ISO2 ej: "AR"
   year: number;
   tipo: string;
   stage: string;
@@ -28,15 +27,22 @@ export type DevProject = {
     lng: number;
     label: string;
   };
+
+  // 🟡 compat (por si algún lado viejo usa "image")
+  image?: string;
 };
 
 export const DEV_PROJECTS: DevProject[] = [
   {
     key: 'nf-azul-001',
     name: 'Proyecto Romeral',
-    cardImage: '/images/projects/dev/romeral-card.png',
-    bannerImage: '/images/projects/dev/romeral-banner.png',
+
+    // ✅ poné acá tus 2 imágenes finales
+    cardImage: '/images/projects/romeral-card.jpg',
+    bannerImage: '/images/projects/romeral-banner.jpg',
+
     country: 'Argentina',
+    countryCode: 'AR',
     year: 2024,
     tipo: 'Forestry',
     stage: 'Piloto',
@@ -85,14 +91,21 @@ y generación futura de créditos certificados.`,
       lng: -71.091,
       label: 'Río Negro, Argentina',
     },
+
+    // compat
+    image: '/images/projects/romeral-banner.jpg',
   },
 
   {
     key: 'nf-eff-002',
     name: 'ENTE Río Negro',
-    cardImage: '/images/projects/dev/ente-card.png',
-    bannerImage: '/images/projects/dev/ente-banner.png',
+
+    // ✅ poné acá tus 2 imágenes finales
+    cardImage: '/images/projects/ente-rn-card.jpg',
+    bannerImage: '/images/projects/ente-rn-banner.jpg',
+
     country: 'Argentina',
+    countryCode: 'AR',
     year: 2024,
     tipo: 'Eficiencia energética',
     stage: 'Fase 1',
@@ -140,5 +153,8 @@ y medición de impacto ambiental.`,
       lng: -71.002,
       label: 'Río Negro, Argentina',
     },
+
+    // compat
+    image: '/images/projects/ente-rn-banner.jpg',
   },
 ];
