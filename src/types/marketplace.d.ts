@@ -1,7 +1,7 @@
-import { Project } from "./project";
+import { Project } from './project';
 export interface Price {
   sourceId: string;
-  type: "listing" | "carbon_pool";
+  type: 'listing' | 'carbon_pool';
   purchasePrice: number;
   baseUnitPrice: number;
   supply: number;
@@ -135,7 +135,7 @@ export interface Listing {
 
 export interface Match {
   sourceId: string;
-  type: "listing" | "carbon_pool";
+  type: 'listing' | 'carbon_pool';
   purchasePrice: number;
   baseUnitPrice: number;
   supply: number;
@@ -182,4 +182,11 @@ export interface RetireParams {
   index: number;
   priceParam: string;
   selectedVintage: string;
+
+  // ✅ nuevo: cantidad a retirar
+  quantity: number;
+
+  // (opcionales por si después querés pasar más info sin romper)
+  sourceId?: string;
+  type?: 'listing' | 'carbon_pool';
 }

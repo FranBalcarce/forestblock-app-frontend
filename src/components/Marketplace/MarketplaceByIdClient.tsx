@@ -24,17 +24,18 @@ export default function MarketplaceByIdClient({ id }: Props) {
   const matches = prices?.filter((p) => getProjectIdFromPrice(p) === project.key) ?? [];
 
   const selectedPriceObj = priceParam
-    ? matches.find((p) => p.purchasePrice.toString() === priceParam)
+    ? matches.find((p) => String(p.purchasePrice) === String(priceParam))
     : null;
 
   const displayPrice = selectedPriceObj
     ? selectedPriceObj.purchasePrice.toFixed(2)
-    : project.displayPrice;
+    : project.displayPrice ?? project.price ?? '';
 
   const selectedVintage = selectedPriceObj
     ? selectedPriceObj.listing?.creditId?.vintage?.toString() ||
-      selectedPriceObj.carbonPool?.creditId?.vintage?.toString()
-    : project.selectedVintage;
+      selectedPriceObj.carbonPool?.creditId?.vintage?.toString() ||
+      ''
+    : project.selectedVintage ?? '';
 
   return (
     <div className="flex gap-10 p-5 overflow-hidden md:overflow-visible min-h-screen">
@@ -42,8 +43,8 @@ export default function MarketplaceByIdClient({ id }: Props) {
         project={project}
         handleRetire={handleRetire}
         matches={matches}
-        selectedVintage={selectedVintage || ''}
-        displayPrice={displayPrice || ''}
+        selectedVintage={selectedVintage}
+        displayPrice={displayPrice}
         priceParam={priceParam}
         isPricesLoading={isPricesLoading}
       />

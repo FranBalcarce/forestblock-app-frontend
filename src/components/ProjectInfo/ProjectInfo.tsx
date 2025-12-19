@@ -11,6 +11,34 @@ import { useGallery } from '@/hooks/useGallery';
 import type { Project } from '@/types/project';
 import type { Price, RetireParams } from '@/types/marketplace';
 
+// convierte cualquier cosa (Image | Image[] | string | etc) a URL string usable por next/image
+const getImageUrl = (img: unknown): string | null => {
+  if (!img) return null;
+
+  if (typeof img === 'string') return img;
+
+  if (Array.isArray(img)) {
+    for (const item of img) {
+      const u = getImageUrl(item);
+      if (u) return u;
+    }
+    return null;
+  }
+
+  if (typeof img === 'object') {
+    const o = img as Record<string, unknown>;
+    const direct = o.url ?? o.src ?? o.imageUrl;
+    if (typeof direct === 'string') return direct;
+
+    for (const k of ['banner', 'thumbnail', 'cover', 'image', 'main']) {
+      const u = getImageUrl(o[k]);
+      if (u) return u;
+    }
+  }
+
+  return null;
+};
+
 type Props = {
   project: Project;
   handleRetire: (params: RetireParams) => void;
@@ -19,17 +47,6 @@ type Props = {
   displayPrice: string;
   priceParam: string | null;
   isPricesLoading: boolean;
-};
-
-const getImageUrl = (img: unknown): string | null => {
-  if (!img) return null;
-  if (typeof img === 'string') return img;
-  if (Array.isArray(img)) return getImageUrl(img[0]);
-  if (typeof img === 'object' && img !== null) {
-    const o = img as Record<string, unknown>;
-    if (typeof o.url === 'string') return o.url;
-  }
-  return null;
 };
 
 export default function ProjectInfo({
@@ -42,10 +59,18 @@ export default function ProjectInfo({
   isPricesLoading,
 }: Props) {
   const router = useRouter();
-  const [quantity, setQuantity] = useState(1);
 
+  // ✅ selector de cantidad
+  const [quantity, setQuantity] = useState<number>(1);
+
+  // Cover: primero coverImage, si no la primera de images
   const coverUrl = useMemo(() => {
-    return getImageUrl(project.coverImage) || getImageUrl(project.images?.[0]) || null;
+    return (
+      getImageUrl(project.coverImage) ||
+      getImageUrl(project.images?.[0]) ||
+      getImageUrl(project.images) ||
+      null
+    );
   }, [project]);
 
   const { customIcon } = useGallery({
@@ -55,11 +80,20 @@ export default function ProjectInfo({
   const mapCoords = useMemo<[number, number] | null>(() => {
     const coords = project.location?.geometry?.coordinates;
     if (!coords || coords.length < 2) return null;
-    return [coords[1], coords[0]];
+
+    const lng = Number(coords[0]);
+    const lat = Number(coords[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+    return [lat, lng];
   }, [project]);
+
+  const canBuy = !isPricesLoading && (matches?.length ?? 0) > 0;
 
   const onBuy = () => {
     const first = matches?.[0];
+
+    // si viniste con ?price=..., lo uso. Si no, uso el primero que venga
     const effectivePriceParam =
       priceParam ?? (first?.purchasePrice != null ? String(first.purchasePrice) : '');
 
@@ -67,14 +101,16 @@ export default function ProjectInfo({
       id: project.key,
       index: 0,
       priceParam: effectivePriceParam,
-      selectedVintage,
+      selectedVintage: selectedVintage || '',
+      quantity, // ✅ ahora sí
     });
   };
 
-  const canBuy = !isPricesLoading && matches.length > 0;
+  const dec = () => setQuantity((q) => Math.max(1, q - 1));
+  const inc = () => setQuantity((q) => q + 1);
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-6">
+    <div className="w-full max-w-6xl mx-auto px-4 py-6 md:py-10">
       <button
         onClick={() => router.back()}
         className="mb-4 rounded-full bg-black/5 px-4 py-2 text-sm hover:bg-black/10"
@@ -82,58 +118,89 @@ export default function ProjectInfo({
         ← Volver
       </button>
 
-      <div className="rounded-3xl border bg-white shadow-sm overflow-hidden">
+      <div className="rounded-3xl border border-black/5 bg-white shadow-sm overflow-hidden">
+        {/* Header / imagen */}
         <div className="relative h-56 md:h-80 bg-black/5">
           {coverUrl ? (
             <Image src={coverUrl} alt={project.name} fill priority style={{ objectFit: 'cover' }} />
           ) : (
-            <div className="h-full flex items-center justify-center text-black/40">Sin imagen</div>
+            <div className="h-full w-full flex items-center justify-center text-black/40">
+              Sin imagen
+            </div>
           )}
         </div>
 
         <div className="p-6">
-          <h1 className="text-2xl font-semibold">{project.name}</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold">{project.name}</h1>
 
-          <p className="mt-3 text-black/70">{project.description || project.short_description}</p>
+          {/* Descripción */}
+          <p className="mt-3 text-black/70 leading-relaxed">
+            {project.description || project.short_description || ''}
+          </p>
 
-          <div className="mt-5 text-lg font-medium">
+          {/* Precio */}
+          <div className="mt-5 text-base font-medium">
             Precio: <span className="font-semibold">${displayPrice}</span> / tCO₂
           </div>
 
-          {/* SELECTOR DE CANTIDAD */}
-          <div className="mt-6 flex items-center gap-4">
-            <button
-              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              className="h-10 w-10 rounded-full border text-lg"
-            >
-              –
-            </button>
+          {/* ✅ Selector cantidad + botón */}
+          <div className="mt-6 flex flex-col gap-3 max-w-sm">
+            <div className="inline-flex items-center justify-between rounded-2xl border border-black/10 bg-white px-3 py-2">
+              <button
+                type="button"
+                onClick={dec}
+                className="h-10 w-10 rounded-xl bg-black/5 hover:bg-black/10 text-lg"
+                aria-label="Disminuir"
+              >
+                −
+              </button>
 
-            <span className="min-w-[40px] text-center font-semibold">{quantity}</span>
+              <div className="min-w-16 text-center">
+                <div className="text-xs text-black/50">Cantidad</div>
+                <div className="text-lg font-semibold">{quantity}</div>
+              </div>
 
-            <button
-              onClick={() => setQuantity((q) => q + 1)}
-              className="h-10 w-10 rounded-full border text-lg"
-            >
-              +
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={inc}
+                className="h-10 w-10 rounded-xl bg-black/5 hover:bg-black/10 text-lg"
+                aria-label="Aumentar"
+              >
+                +
+              </button>
+            </div>
 
-          <div className="mt-6">
             <Button variant="quaternary" isDisabled={!canBuy} onClick={onBuy}>
               {isPricesLoading ? 'Cargando precios...' : 'Comprar / Retirar'}
             </Button>
           </div>
 
+          {/* Mapa */}
           {mapCoords && (
             <div className="mt-8">
-              <div className="font-semibold mb-3">Ubicación</div>
-              <div className="h-80 rounded-2xl overflow-hidden border">
+              <div className="text-lg font-semibold mb-3">Ubicación</div>
+
+              <div className="h-80 rounded-2xl overflow-hidden border border-black/5">
                 <MapView
-                  projectLocations={[{ coordinates: mapCoords, name: project.name }]}
+                  projectLocations={[
+                    {
+                      coordinates: mapCoords,
+                      name: project.name,
+                    },
+                  ]}
                   customIcon={customIcon}
                 />
               </div>
+            </div>
+          )}
+
+          {/* Descripción larga */}
+          {project.long_description && (
+            <div className="mt-8">
+              <div className="text-lg font-semibold mb-2">Descripción</div>
+              <p className="text-black/70 leading-relaxed whitespace-pre-line">
+                {project.long_description}
+              </p>
             </div>
           )}
         </div>
