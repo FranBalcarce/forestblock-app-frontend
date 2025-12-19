@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Project } from '@/types/project';
 import { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
@@ -40,7 +41,7 @@ function getProjectKeyFromPrice(pr: unknown): string | undefined {
     if (isRecord(creditId) && typeof creditId.projectId === 'string') return creditId.projectId;
   }
 
-  if (typeof pr.projectId === 'string') return pr.projectId;
+  if (typeof (pr as any).projectId === 'string') return (pr as any).projectId;
 
   return undefined;
 }
@@ -55,8 +56,8 @@ function getNumericPriceFromPrice(pr: unknown): number | null {
     return pr.baseUnitPrice;
 
   const listing = pr.listing;
-  if (isRecord(listing) && typeof listing.singleUnitPrice === 'string') {
-    const n = Number(listing.singleUnitPrice);
+  if (isRecord(listing) && typeof (listing as any).singleUnitPrice === 'string') {
+    const n = Number((listing as any).singleUnitPrice);
     if (Number.isFinite(n)) return n;
   }
 
@@ -87,12 +88,14 @@ function normalizeProject(p: Project, pricesRaw: unknown[]): Project {
     ...p,
     images: p.images ?? [],
     description: p.short_description || p.description || 'No description available',
-    displayPrice: displayFromPrices ?? p.price ?? '0',
+    displayPrice: displayFromPrices ?? (p as any).price ?? '0',
     selectedVintage: p.vintages?.[0],
   };
 }
 
 const useMarketplace = (id?: string): UseMarketplace => {
+  const router = useRouter();
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
 
@@ -210,10 +213,19 @@ const useMarketplace = (id?: string): UseMarketplace => {
   }, [projects, searchTerm, selectedCountries, selectedCategories, selectedVintages, sortBy]);
 
   /* =========================
-     HANDLE RETIRE (BUY)
+     HANDLE RETIRE (BUY) ✅
+     (Restauramos el flujo: redirige a retireCheckout)
   ========================== */
   const handleRetire = (params: RetireParams) => {
-    console.log('RETIRE / BUY:', params);
+    const query = new URLSearchParams({
+      projectId: params.id,
+      price: params.priceParam,
+      vintage: params.selectedVintage,
+      quantity: String(params.quantity),
+      index: String(params.index),
+    });
+
+    router.push(`/retireCheckout?${query.toString()}`);
   };
 
   const availableCategories = useMemo(() => {
@@ -247,7 +259,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
 
     handleRetire,
 
-    // tip para tu UI: lo casteamos a Price[] para que no rompa tu UseMarketplace
+    // lo casteamos a Price[] para que no rompa tu UseMarketplace
     prices: prices as unknown as Price[],
     isPricesLoading,
   };

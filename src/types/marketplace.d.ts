@@ -177,16 +177,10 @@ export interface Match {
   };
 }
 
-export interface RetireParams {
+export type RetireParams = {
   id: string;
   index: number;
   priceParam: string;
   selectedVintage: string;
-
-  // ✅ nuevo: cantidad a retirar
-  quantity: number;
-
-  // (opcionales por si después querés pasar más info sin romper)
-  sourceId?: string;
-  type?: 'listing' | 'carbon_pool';
-}
+  quantity: number; // ✅ OBLIGATORIO
+};
