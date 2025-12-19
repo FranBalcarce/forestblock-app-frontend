@@ -25,37 +25,39 @@ const ListingItem = ({
   } = useRetire();
 
   const router = useRouter();
-  const [localIndex, setLocalIndex] = useState<number>(contextIndex as number);
+  const [localIndex, setLocalIndex] = useState<number>(Number(contextIndex ?? 0));
   const [defaultIndex, setDefaultIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (defaultIndex === null && matches.length > 0) {
       let computedIndex = matches.findIndex((match) => {
         const matchVintage = match.listing
-          ? match.listing?.creditId?.vintage.toString()
-          : match.carbonPool?.creditId.vintage.toString();
-        const matchPrice = match.purchasePrice.toFixed(2);
+          ? match.listing?.creditId?.vintage?.toString()
+          : match.carbonPool?.creditId?.vintage?.toString();
+
+        const matchPrice = Number(match.purchasePrice ?? 0).toFixed(2);
         return matchVintage === selectedVintage && matchPrice === displayPrice;
       });
 
       if (computedIndex === -1) {
         computedIndex = matches.findIndex((match) => {
           const matchVintage = match.listing
-            ? match.listing?.creditId?.vintage.toString()
-            : match.carbonPool?.creditId.vintage.toString();
+            ? match.listing?.creditId?.vintage?.toString()
+            : match.carbonPool?.creditId?.vintage?.toString();
           return matchVintage === selectedVintage;
         });
       }
 
-      if (computedIndex === -1) {
-        computedIndex = 0;
-      }
+      if (computedIndex === -1) computedIndex = 0;
 
       setDefaultIndex(computedIndex);
       setLocalIndex(computedIndex);
       setIndex(computedIndex);
+
+      const supply = matches[computedIndex]?.supply;
+      if (typeof supply === 'number') setTotalSupply(supply);
     }
-  }, [defaultIndex, matches, selectedVintage, displayPrice, setIndex]);
+  }, [defaultIndex, matches, selectedVintage, displayPrice, setIndex, setTotalSupply]);
 
   const effectiveIndex = localIndex;
   const selectedMatch = matches[effectiveIndex] || matches[0];
@@ -75,36 +77,50 @@ const ListingItem = ({
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         }).format(availableTonnes) + ' ton'
-      : availableTonnes;
+      : String(availableTonnes);
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newIndex = Number(e.target.value);
     setLocalIndex(newIndex);
     setIndex(newIndex);
 
-    const newPrice = matches[newIndex].purchasePrice;
-    setTotalSupply(matches[newIndex].supply);
+    const newPrice = matches[newIndex]?.purchasePrice;
+    const newSupply = matches[newIndex]?.supply;
 
-    router.replace(
-      `?price=${newPrice}&vintages=${matches
-        .map((match) =>
-          match.listing
-            ? match.listing?.creditId?.vintage.toString()
-            : match.carbonPool?.creditId.vintage.toString()
-        )
-        .join(',')}`
-    );
+    if (typeof newSupply === 'number') setTotalSupply(newSupply);
+
+    const vintages = matches
+      .map((m) =>
+        m.listing
+          ? m.listing?.creditId?.vintage?.toString()
+          : m.carbonPool?.creditId?.vintage?.toString()
+      )
+      .filter((v): v is string => typeof v === 'string' && v.length > 0)
+      .join(',');
+
+    router.replace(`?price=${newPrice ?? ''}&vintages=${vintages}`);
   };
 
   if (isPricesLoading) {
     return <ListingItemSkeleton />;
   }
 
+  const matchKey =
+    selectedMatch?.listing?.id || selectedMatch?.carbonPool?.creditId?.creditId || 'match';
+
+  const projectId =
+    selectedMatch?.listing?.creditId?.projectId ??
+    selectedMatch?.carbonPool?.creditId?.projectId ??
+    '';
+
+  const vintage =
+    selectedMatch?.listing?.creditId?.vintage?.toString() ??
+    selectedMatch?.carbonPool?.creditId?.vintage?.toString() ??
+    selectedVintage ??
+    '';
+
   return (
-    <div
-      key={selectedMatch?.listing?.id || selectedMatch?.carbonPool?.creditId?.creditId}
-      className="relative pb-6 mb-8 last:mb-0 flex flex-col gap-5 h-auto"
-    >
+    <div key={matchKey} className="relative pb-6 mb-8 last:mb-0 flex flex-col gap-5 h-auto">
       <ListingDetail
         label="Año"
         value={
@@ -112,10 +128,10 @@ const ListingItem = ({
             {matches.map((match, i) => {
               const matchVintage = match.listing
                 ? match.listing?.creditId?.vintage?.toString()
-                : match.carbonPool?.creditId.vintage.toString();
+                : match.carbonPool?.creditId?.vintage?.toString();
               return (
                 <option key={i} value={i}>
-                  {matchVintage}
+                  {matchVintage ?? 'N/A'}
                 </option>
               );
             })}
@@ -129,7 +145,7 @@ const ListingItem = ({
         value={
           <span>
             <span className="text-forestGreen font-bold font-neueMontreal text-[23px]">
-              ${price.toFixed(2)}
+              ${Number(price ?? 0).toFixed(2)}
             </span>{' '}
             <span className="text-customGray text-[23px] font-neueMontreal">/tCO2e</span>
           </span>
@@ -148,15 +164,9 @@ const ListingItem = ({
       <div className="w-full h-[1px] bg-gray-300"></div>
 
       <div className="flex justify-between items-center">
-        <label
-          htmlFor={`quantity-${
-            selectedMatch?.listing?.id || selectedMatch?.carbonPool?.creditId?.creditId
-          }`}
-          className="text-customGray text-[23px] font-aeonik"
-        >
+        <label htmlFor={`quantity-${matchKey}`} className="text-customGray text-[23px] font-aeonik">
           Cantidad
         </label>
-
         <div className="flex flex-col items-end">
           <QuantitySelector
             value={tonnesToRetire}
@@ -186,12 +196,10 @@ const ListingItem = ({
             rel="noopener noreferrer"
             className="text-forestGreen underline"
           >
-            {selectedMatch?.listing?.creditId?.projectId ??
-              selectedMatch?.carbonPool?.creditId?.projectId}
+            {projectId}
           </Link>
         </p>
       </div>
-
       <div className="w-full h-[1px] bg-gray-300"></div>
 
       <div className="flex justify-between items-center text-[23px] text-customGray">
@@ -203,19 +211,14 @@ const ListingItem = ({
         className="mt-2 w-full px-4 py-4 bg-mintGreen text-forestGreen font-medium font-aeonik rounded-full shadow text-[23px] z-40"
         onClick={() =>
           handleRetire({
-            id:
-              selectedMatch?.listing?.creditId?.projectId ??
-              selectedMatch?.carbonPool?.creditId?.projectId ??
-              '',
+            id: projectId,
             index: effectiveIndex,
             priceParam: priceParam ?? '',
-            selectedVintage:
-              selectedMatch?.listing?.creditId?.vintage?.toString() ??
-              selectedMatch?.carbonPool?.creditId?.vintage?.toString() ??
-              '',
-            quantity: tonnesToRetire, // ✅ FIX: ahora sí mandamos cantidad
+            selectedVintage: vintage,
+            quantity: tonnesToRetire, // ✅ CLAVE para que no falle tu type (y para el retiro real)
           })
         }
+        disabled={!projectId || !vintage || tonnesToRetire <= 0}
       >
         Retirar
       </button>

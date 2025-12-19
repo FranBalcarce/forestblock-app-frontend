@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+
 import type { Project } from '@/types/project';
 import type { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
@@ -16,113 +17,222 @@ function isRecord(v: unknown): v is RecordUnknown {
   return typeof v === 'object' && v !== null;
 }
 
-function getString(obj: unknown, key: string): string | undefined {
-  if (!isRecord(obj)) return undefined;
-  const val = obj[key];
-  return typeof val === 'string' ? val : undefined;
-}
-
-function getNumber(obj: unknown, key: string): number | undefined {
-  if (!isRecord(obj)) return undefined;
-  const val = obj[key];
-  return typeof val === 'number' && Number.isFinite(val) ? val : undefined;
-}
-
-function unwrapArray<T = unknown>(payload: unknown): T[] {
+function unwrapArray<T>(payload: unknown): T[] {
   if (Array.isArray(payload)) return payload as T[];
   if (isRecord(payload) && Array.isArray(payload.items)) return payload.items as T[];
   if (isRecord(payload) && Array.isArray(payload.data)) return payload.data as T[];
   return [];
 }
 
-function getProjectKeyFromPrice(pr: unknown): string | undefined {
-  if (!isRecord(pr)) return undefined;
-
-  const listing = pr.listing;
-  if (isRecord(listing)) {
-    const creditId = listing.creditId;
-    if (isRecord(creditId)) {
-      const pid = getString(creditId, 'projectId');
-      if (pid) return pid;
-    }
-
-    const project = listing.project;
-    if (isRecord(project)) {
-      const key = getString(project, 'key');
-      if (key) return key;
-    }
-  }
-
-  const carbonPool = pr.carbonPool;
-  if (isRecord(carbonPool)) {
-    const creditId = carbonPool.creditId;
-    if (isRecord(creditId)) {
-      const pid = getString(creditId, 'projectId');
-      if (pid) return pid;
-    }
-  }
-
-  // fallback: algunos shapes traen projectId suelto
-  const direct = getString(pr, 'projectId');
-  if (direct) return direct;
-
-  return undefined;
+function readString(obj: RecordUnknown, key: string): string | undefined {
+  const v = obj[key];
+  return typeof v === 'string' ? v : undefined;
 }
 
-function getNumericPriceFromPrice(pr: unknown): number | null {
-  if (!isRecord(pr)) return null;
+function readNumber(obj: RecordUnknown, key: string): number | undefined {
+  const v = obj[key];
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+}
 
-  const purchasePrice = getNumber(pr, 'purchasePrice');
-  if (purchasePrice != null) return purchasePrice;
+function readNumberFromString(obj: RecordUnknown, key: string): number | undefined {
+  const v = obj[key];
+  if (typeof v !== 'string') return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
 
-  const baseUnitPrice = getNumber(pr, 'baseUnitPrice');
-  if (baseUnitPrice != null) return baseUnitPrice;
+function getProjectIdFromPriceLike(p: Price): string | undefined {
+  return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
+}
 
-  // fallback: algunos shapes traen listing.singleUnitPrice como string
-  const listing = pr.listing;
-  if (isRecord(listing)) {
-    const singleUnitPrice = getString(listing, 'singleUnitPrice');
-    if (singleUnitPrice) {
-      const n = Number(singleUnitPrice);
-      if (Number.isFinite(n)) return n;
-    }
-  }
+/**
+ * Normaliza prices que pueden venir en camelCase o snake_case.
+ * Si no puede construir un Price válido, devuelve null.
+ */
+function normalizePrice(raw: unknown): Price | null {
+  if (!isRecord(raw)) return null;
 
-  return null;
+  const sourceId =
+    readString(raw, 'sourceId') ??
+    readString(raw, 'source_id') ??
+    readString(raw, 'asset_price_source_id') ??
+    '';
+
+  const typeRaw = readString(raw, 'type') ?? readString(raw, 'asset_type') ?? undefined;
+
+  const type: Price['type'] =
+    typeRaw === 'listing' || typeRaw === 'carbon_pool'
+      ? typeRaw
+      : isRecord(raw.listing)
+      ? 'listing'
+      : 'carbon_pool';
+
+  const purchasePrice =
+    readNumber(raw, 'purchasePrice') ??
+    readNumber(raw, 'purchase_price') ??
+    readNumberFromString(raw, 'purchasePrice') ??
+    readNumberFromString(raw, 'purchase_price');
+
+  const baseUnitPrice =
+    readNumber(raw, 'baseUnitPrice') ??
+    readNumber(raw, 'base_unit_price') ??
+    readNumberFromString(raw, 'baseUnitPrice') ??
+    readNumberFromString(raw, 'base_unit_price');
+
+  const supply =
+    readNumber(raw, 'supply') ??
+    readNumber(raw, 'available_supply') ??
+    readNumberFromString(raw, 'supply') ??
+    0;
+
+  const minFillAmount =
+    readNumber(raw, 'minFillAmount') ??
+    readNumber(raw, 'min_fill_amount') ??
+    readNumberFromString(raw, 'minFillAmount') ??
+    readNumberFromString(raw, 'min_fill_amount') ??
+    0;
+
+  // listing / carbonPool (puede venir snake_case)
+  const listingRaw = raw['listing'];
+  const carbonPoolRaw = raw['carbonPool'] ?? raw['carbon_pool'];
+
+  const listing: Price['listing'] | undefined = isRecord(listingRaw)
+    ? (() => {
+        const credit = listingRaw['creditId'] ?? listingRaw['credit_id'];
+        const creditId =
+          isRecord(credit) && (readString(credit, 'projectId') ?? readString(credit, 'project_id'))
+            ? {
+                projectId:
+                  readString(credit, 'projectId') ?? readString(credit, 'project_id') ?? '',
+                vintage:
+                  readNumber(credit, 'vintage') ?? readNumberFromString(credit, 'vintage') ?? 0,
+              }
+            : undefined;
+
+        const tokenRaw = listingRaw['token'];
+        const token = isRecord(tokenRaw)
+          ? {
+              id: readString(tokenRaw, 'id') ?? '',
+              address: readString(tokenRaw, 'address') ?? '',
+              decimals: readNumber(tokenRaw, 'decimals') ?? 0,
+              tokenStandard:
+                readString(tokenRaw, 'tokenStandard') ??
+                readString(tokenRaw, 'token_standard') ??
+                '',
+              name: readString(tokenRaw, 'name') ?? '',
+              isExAnte: Boolean(tokenRaw['isExAnte'] ?? tokenRaw['is_ex_ante']),
+              symbol: readString(tokenRaw, 'symbol') ?? '',
+              tokenId: readNumber(tokenRaw, 'tokenId') ?? readNumber(tokenRaw, 'token_id') ?? 0,
+            }
+          : {
+              id: '',
+              address: '',
+              decimals: 0,
+              tokenStandard: '',
+              name: '',
+              isExAnte: false,
+              symbol: '',
+              tokenId: 0,
+            };
+
+        return {
+          id: readString(listingRaw, 'id') ?? '',
+          creditId,
+          token,
+          sellerId: readString(listingRaw, 'sellerId') ?? readString(listingRaw, 'seller_id') ?? '',
+        };
+      })()
+    : undefined;
+
+  const carbonPool: Price['carbonPool'] | undefined = isRecord(carbonPoolRaw)
+    ? (() => {
+        const credit = carbonPoolRaw['creditId'] ?? carbonPoolRaw['credit_id'];
+        if (!isRecord(credit)) return undefined;
+
+        const projectId = readString(credit, 'projectId') ?? readString(credit, 'project_id');
+        if (!projectId) return undefined;
+
+        const creditIdValue =
+          readString(credit, 'creditId') ?? readString(credit, 'credit_id') ?? '';
+        const vintage =
+          readNumber(credit, 'vintage') ?? readNumberFromString(credit, 'vintage') ?? 0;
+
+        const tokenRaw = carbonPoolRaw['token'];
+        const token = isRecord(tokenRaw)
+          ? {
+              id: readString(tokenRaw, 'id') ?? '',
+              address: readString(tokenRaw, 'address') ?? '',
+              decimals: readNumber(tokenRaw, 'decimals') ?? 0,
+              tokenStandard:
+                readString(tokenRaw, 'tokenStandard') ??
+                readString(tokenRaw, 'token_standard') ??
+                '',
+              name: readString(tokenRaw, 'name') ?? '',
+              isExAnte: Boolean(tokenRaw['isExAnte'] ?? tokenRaw['is_ex_ante']),
+              symbol: readString(tokenRaw, 'symbol') ?? '',
+              tokenId: readNumber(tokenRaw, 'tokenId') ?? readNumber(tokenRaw, 'token_id') ?? 0,
+            }
+          : {
+              id: '',
+              address: '',
+              decimals: 0,
+              tokenStandard: '',
+              name: '',
+              isExAnte: false,
+              symbol: '',
+              tokenId: 0,
+            };
+
+        return {
+          creditId: {
+            projectId,
+            vintage,
+            creditId: creditIdValue,
+          },
+          token,
+        };
+      })()
+    : undefined;
+
+  // Si no hay nada usable para precio, descartamos
+  if (purchasePrice === undefined && baseUnitPrice === undefined) return null;
+
+  return {
+    sourceId,
+    type,
+    purchasePrice: purchasePrice ?? baseUnitPrice ?? 0,
+    baseUnitPrice: baseUnitPrice ?? purchasePrice ?? 0,
+    supply,
+    minFillAmount,
+    listing,
+    carbonPool,
+  };
 }
 
 function computeDisplayPriceForProject(
   projectKey: string,
-  pricesRaw: unknown[]
+  pricesList: Price[]
 ): string | undefined {
-  const matches = pricesRaw.filter((p) => getProjectKeyFromPrice(p) === projectKey);
+  const matches = pricesList.filter((p) => getProjectIdFromPriceLike(p) === projectKey);
   if (matches.length === 0) return undefined;
 
   let min: number | null = null;
   for (const m of matches) {
-    const val = getNumericPriceFromPrice(m);
-    if (val == null) continue;
+    const val = Number(m.purchasePrice ?? m.baseUnitPrice ?? 0);
+    if (!Number.isFinite(val) || val <= 0) continue;
     if (min == null || val < min) min = val;
   }
-
   return min == null ? undefined : min.toFixed(2);
 }
 
-function normalizeProject(p: Project, pricesRaw: unknown[]): Project {
-  const displayFromPrices = computeDisplayPriceForProject(p.key, pricesRaw);
-
-  // algunos modelos traen "price" como string/number (legacy). Lo leemos seguro.
-  let legacyPrice: string | undefined;
-  const maybePrice = (p as unknown as RecordUnknown).price;
-  if (typeof maybePrice === 'string') legacyPrice = maybePrice;
-  if (typeof maybePrice === 'number' && Number.isFinite(maybePrice))
-    legacyPrice = String(maybePrice);
+function normalizeProject(p: Project, pricesList: Price[]): Project {
+  const displayFromPrices = computeDisplayPriceForProject(p.key, pricesList);
 
   return {
     ...p,
     images: p.images ?? [],
     description: p.short_description || p.description || 'No description available',
-    displayPrice: displayFromPrices ?? legacyPrice ?? '0',
+    displayPrice: displayFromPrices ?? (typeof p.price === 'string' ? p.price : '0'),
     selectedVintage: p.vintages?.[0],
   };
 }
@@ -133,8 +243,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
 
-  // guardamos unknown[] para soportar cambios de shape sin romper
-  const [pricesRaw, setPricesRaw] = useState<unknown[]>([]);
+  const [prices, setPrices] = useState<Price[]>([]);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [isPricesLoading, setIsPricesLoading] = useState<boolean>(true);
@@ -146,18 +255,24 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
-  /* =========================
-     FETCH PRICES (1 vez)
-  ========================== */
+  // =========================
+  // FETCH PRICES (1 vez)
+  // =========================
   useEffect(() => {
     const fetchPrices = async () => {
       try {
         setIsPricesLoading(true);
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices);
-        setPricesRaw(unwrapArray<unknown>(res.data));
+
+        const rawList = unwrapArray<unknown>(res.data);
+        const normalized = rawList
+          .map((x) => normalizePrice(x))
+          .filter((x): x is Price => x !== null);
+
+        setPrices(normalized);
       } catch (err) {
         console.error('Error fetching prices', err);
-        setPricesRaw([]);
+        setPrices([]);
       } finally {
         setIsPricesLoading(false);
       }
@@ -166,9 +281,9 @@ const useMarketplace = (id?: string): UseMarketplace => {
     fetchPrices();
   }, []);
 
-  /* =========================
-     FETCH PROJECTS (LIST)
-  ========================== */
+  // =========================
+  // FETCH PROJECTS (LIST)
+  // =========================
   useEffect(() => {
     if (id) return;
 
@@ -177,7 +292,8 @@ const useMarketplace = (id?: string): UseMarketplace => {
         setLoading(true);
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
         const list = unwrapArray<Project>(res.data);
-        setProjects(list.map((p) => normalizeProject(p, pricesRaw)));
+
+        setProjects(list.map((p) => normalizeProject(p, prices)));
       } catch (err) {
         console.error('Error fetching projects', err);
         setProjects([]);
@@ -187,11 +303,11 @@ const useMarketplace = (id?: string): UseMarketplace => {
     };
 
     fetchProjects();
-  }, [id, pricesRaw]);
+  }, [id, prices]);
 
-  /* =========================
-     FETCH SINGLE PROJECT
-  ========================== */
+  // =========================
+  // FETCH SINGLE PROJECT
+  // =========================
   useEffect(() => {
     if (!id) return;
 
@@ -199,7 +315,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
       try {
         setLoading(true);
         const res = await axiosPublicInstance.get<Project>(ENDPOINTS.projectById(id));
-        setProject(normalizeProject(res.data, pricesRaw));
+        setProject(normalizeProject(res.data, prices));
       } catch (err) {
         console.error('Error fetching project', err);
         setProject(null);
@@ -209,17 +325,17 @@ const useMarketplace = (id?: string): UseMarketplace => {
     };
 
     fetchProject();
-  }, [id, pricesRaw]);
+  }, [id, prices]);
 
-  /* =========================
-     FILTERED PROJECTS
-  ========================== */
+  // =========================
+  // FILTERED PROJECTS
+  // =========================
   const filteredProjects = useMemo(() => {
     let list = [...projects];
 
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
-      list = list.filter((p) => p.name?.toLowerCase().includes(s));
+      list = list.filter((p) => (p.name ?? '').toLowerCase().includes(s));
     }
 
     if (selectedCountries.length) {
@@ -245,19 +361,25 @@ const useMarketplace = (id?: string): UseMarketplace => {
     return list;
   }, [projects, searchTerm, selectedCountries, selectedCategories, selectedVintages, sortBy]);
 
-  /* =========================
-     HANDLE RETIRE (BUY)
-  ========================== */
+  // =========================
+  // HANDLE RETIRE (RESTORE FLOW)
+  // =========================
   const handleRetire = (params: RetireParams) => {
-    const query = new URLSearchParams({
-      projectId: params.id,
-      price: params.priceParam,
-      vintage: params.selectedVintage,
-      quantity: String(params.quantity),
-      index: String(params.index),
-    });
+    try {
+      if (typeof window !== 'undefined') {
+        const payload = {
+          ...params,
+          quantity: (params as unknown as { quantity?: number }).quantity ?? 1,
+          createdAt: Date.now(),
+        };
+        localStorage.setItem('pendingRetirement', JSON.stringify(payload));
+      }
 
-    router.push(`/retireCheckout?${query.toString()}`);
+      router.push('/retirementSteps');
+      // router.push("/retireCheckout");
+    } catch (e) {
+      console.error('Error handling retire', e);
+    }
   };
 
   const availableCategories = useMemo(() => {
@@ -291,8 +413,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
 
     handleRetire,
 
-    // tu UI espera Price[]; casteo “safe” (no any)
-    prices: pricesRaw as unknown as Price[],
+    prices,
     isPricesLoading,
   };
 };
