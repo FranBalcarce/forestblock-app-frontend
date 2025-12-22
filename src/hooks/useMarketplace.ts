@@ -2,11 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-
-import type { Project } from '@/types/project';
-import type { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
-
-import axios from 'axios';
+import { Project } from '@/types/project';
+import { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
+import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
 const ENDPOINTS = {
   projects: '/api/carbon/carbonProjects',
@@ -25,28 +23,6 @@ function unwrapArray<T = unknown>(payload: unknown): T[] {
   if (isRecord(payload) && Array.isArray(payload.items)) return payload.items as T[];
   if (isRecord(payload) && Array.isArray(payload.data)) return payload.data as T[];
   return [];
-}
-
-// OJO: en prod, si no seteaste NEXT_PUBLIC_API_BASE_URL, esto devuelve '' y axios pega al MISMO DOMINIO.
-function getApiBaseURL(): string {
-  const raw = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
-
-  return raw.replace(/\/$/, '');
-}
-
-function getProjectStableId(p: Project): string {
-  // En tu data real suele ser p.key (ej: "VCS-191")
-  const anyP = p as unknown as Record<string, unknown>;
-  const key = typeof (p as Project).key === 'string' ? (p as Project).key : undefined;
-
-  const id =
-    typeof anyP.id === 'string'
-      ? (anyP.id as string)
-      : typeof anyP.projectId === 'string'
-      ? (anyP.projectId as string)
-      : undefined;
-
-  return key || id || '';
 }
 
 function getProjectKeyFromPrice(pr: unknown): string | undefined {
@@ -93,8 +69,6 @@ function computeDisplayPriceForProject(
   projectKey: string,
   pricesRaw: unknown[]
 ): string | undefined {
-  if (!projectKey) return undefined;
-
   const matches = pricesRaw.filter((p) => getProjectKeyFromPrice(p) === projectKey);
   if (matches.length === 0) return undefined;
 
@@ -109,23 +83,14 @@ function computeDisplayPriceForProject(
 }
 
 function normalizeProject(p: Project, pricesRaw: unknown[]): Project {
-  const stableId = getProjectStableId(p);
-  const displayFromPrices = computeDisplayPriceForProject(stableId, pricesRaw);
-
-  const anyP = p as unknown as Record<string, unknown>;
-  const fallbackPrice =
-    typeof anyP.price === 'string'
-      ? (anyP.price as string)
-      : typeof anyP.price === 'number'
-      ? String(anyP.price)
-      : '0';
+  const displayFromPrices = computeDisplayPriceForProject(p.key, pricesRaw);
 
   return {
     ...p,
     images: p.images ?? [],
     description: p.short_description || p.description || 'No description available',
-    displayPrice: displayFromPrices ?? (p.displayPrice as string) ?? fallbackPrice,
-    selectedVintage: (p as Project).vintages?.[0],
+    displayPrice: displayFromPrices ?? p.price ?? '0',
+    selectedVintage: p.vintages?.[0],
   };
 }
 
@@ -135,56 +100,48 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
 
-  // guardamos crudo para no romper si cambia el shape
+  // unknown[] para tolerar cambios de shape
   const [pricesRaw, setPricesRaw] = useState<unknown[]>([]);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [isPricesLoading, setIsPricesLoading] = useState<boolean>(true);
 
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [sortBy, setSortBy] = useState<string>('price_asc');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('price_asc');
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
-  // axios local (baseURL = '' => mismo dominio)
-  const api = useMemo(() => {
-    const baseURL = getApiBaseURL();
-
-    return axios.create({
-      baseURL,
-      timeout: 180000,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }, []);
-
   /* =========================
      FETCH PRICES (1 vez)
+     🔥 anti-cache: _ts + no-cache headers
   ========================== */
   useEffect(() => {
-    let alive = true;
-
     const fetchPrices = async () => {
       try {
         setIsPricesLoading(true);
-        const res = await api.get<unknown>(ENDPOINTS.prices);
+
+        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices, {
+          params: { _ts: Date.now() }, // ✅ evita 304 y cuerpos vacíos
+          headers: {
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+          },
+        });
 
         const list = unwrapArray<unknown>(res.data);
-        if (alive) setPricesRaw(list);
+        setPricesRaw(list);
       } catch (err) {
         console.error('Error fetching prices', err);
-        if (alive) setPricesRaw([]);
+        setPricesRaw([]);
       } finally {
-        if (alive) setIsPricesLoading(false);
+        setIsPricesLoading(false);
       }
     };
 
     fetchPrices();
-    return () => {
-      alive = false;
-    };
-  }, [api]);
+  }, []);
 
   /* =========================
      FETCH PROJECTS (LIST)
@@ -192,30 +149,29 @@ const useMarketplace = (id?: string): UseMarketplace => {
   useEffect(() => {
     if (id) return;
 
-    let alive = true;
-
     const fetchProjects = async () => {
       try {
         setLoading(true);
-        const res = await api.get<unknown>(ENDPOINTS.projects);
-        const list = unwrapArray<Project>(res.data);
+        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects, {
+          params: { _ts: Date.now() },
+          headers: {
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+          },
+        });
 
-        const normalized = list.map((p) => normalizeProject(p, pricesRaw));
-        if (alive) setProjects(normalized);
+        const list = unwrapArray<Project>(res.data);
+        setProjects(list.map((p) => normalizeProject(p, pricesRaw)));
       } catch (err) {
         console.error('Error fetching projects', err);
-        if (alive) setProjects([]);
+        setProjects([]);
       } finally {
-        if (alive) setLoading(false);
+        setLoading(false);
       }
     };
 
     fetchProjects();
-
-    return () => {
-      alive = false;
-    };
-  }, [api, id, pricesRaw]);
+  }, [id, pricesRaw]);
 
   /* =========================
      FETCH SINGLE PROJECT
@@ -223,28 +179,28 @@ const useMarketplace = (id?: string): UseMarketplace => {
   useEffect(() => {
     if (!id) return;
 
-    let alive = true;
-
     const fetchProject = async () => {
       try {
         setLoading(true);
-        const res = await api.get<Project>(ENDPOINTS.projectById(id));
-        const normalized = normalizeProject(res.data, pricesRaw);
-        if (alive) setProject(normalized);
+        const res = await axiosPublicInstance.get<Project>(ENDPOINTS.projectById(id), {
+          params: { _ts: Date.now() },
+          headers: {
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+          },
+        });
+
+        setProject(normalizeProject(res.data, pricesRaw));
       } catch (err) {
         console.error('Error fetching project', err);
-        if (alive) setProject(null);
+        setProject(null);
       } finally {
-        if (alive) setLoading(false);
+        setLoading(false);
       }
     };
 
     fetchProject();
-
-    return () => {
-      alive = false;
-    };
-  }, [api, id, pricesRaw]);
+  }, [id, pricesRaw]);
 
   /* =========================
      FILTERED PROJECTS
@@ -271,7 +227,9 @@ const useMarketplace = (id?: string): UseMarketplace => {
 
     if (sortBy === 'price_asc') {
       list.sort((a, b) => Number(a.displayPrice ?? 0) - Number(b.displayPrice ?? 0));
-    } else if (sortBy === 'price_desc') {
+    }
+
+    if (sortBy === 'price_desc') {
       list.sort((a, b) => Number(b.displayPrice ?? 0) - Number(a.displayPrice ?? 0));
     }
 
@@ -280,40 +238,27 @@ const useMarketplace = (id?: string): UseMarketplace => {
 
   /* =========================
      HANDLE RETIRE (BUY)
+     ✅ navega a /retireCheckout
   ========================== */
   const handleRetire = (params: RetireParams) => {
-    // 1) Guardamos el proyecto para que /retirementSteps lo lea después (como ya hacés)
-    const currentProject =
-      project ??
-      projects.find((p) => getProjectStableId(p) === params.id) ??
-      projects.find((p) => (p as Project).key === params.id) ??
-      null;
+    try {
+      // guardamos el project para que tus steps/checkout lo lean
+      const currentProject = project ?? projects.find((p) => p.key === params.id) ?? null;
+      if (typeof window !== 'undefined' && currentProject) {
+        localStorage.setItem('project', JSON.stringify(currentProject));
+        localStorage.setItem('selectedVintage', params.selectedVintage || '0');
+      }
 
-    if (typeof window !== 'undefined') {
-      if (currentProject) localStorage.setItem('project', JSON.stringify(currentProject));
-      localStorage.setItem('selectedVintage', params.selectedVintage || '0');
+      const sp = new URLSearchParams();
+      sp.set('index', String(params.index));
+      sp.set('selectedVintage', params.selectedVintage || '0');
+      sp.set('price', params.priceParam || '');
+      sp.set('quantity', String(params.quantity ?? 1));
+
+      router.push(`/retireCheckout?${sp.toString()}`);
+    } catch (e) {
+      console.error('handleRetire error:', e);
     }
-
-    // 2) Mandamos a checkout (tu ruta es /retireCheckout)
-    const sp = new URLSearchParams();
-    sp.set('index', String(params.index));
-    sp.set('selectedVintage', params.selectedVintage || '0');
-
-    // price para que el checkout tenga contexto (y para debug)
-    if (params.priceParam) sp.set('price', params.priceParam);
-
-    // methodologyName lo usa tu RetireCheckoutClient
-    const anyP = currentProject as unknown as Record<string, unknown> | null;
-    const methodologyName =
-      anyP && typeof anyP.methodology === 'string'
-        ? (anyP.methodology as string)
-        : anyP && typeof anyP.methodologyName === 'string'
-        ? (anyP.methodologyName as string)
-        : 'Sin metodología';
-
-    sp.set('methodologyName', methodologyName);
-
-    router.push(`/retireCheckout?${sp.toString()}`);
   };
 
   const availableCategories = useMemo(() => {
@@ -322,9 +267,6 @@ const useMarketplace = (id?: string): UseMarketplace => {
       .filter((c): c is string => typeof c === 'string' && c.length > 0);
     return Array.from(new Set(cats));
   }, [projects]);
-
-  // casteo final: tu UI espera Price[]
-  const prices = pricesRaw as unknown as Price[];
 
   return {
     filteredProjects,
@@ -350,7 +292,8 @@ const useMarketplace = (id?: string): UseMarketplace => {
 
     handleRetire,
 
-    prices,
+    // si tu UI tipa Price[], lo exponemos así
+    prices: pricesRaw as unknown as Price[],
     isPricesLoading,
   };
 };
