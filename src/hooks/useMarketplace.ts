@@ -1,9 +1,9 @@
-'use client';
-
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Project } from '@/types/project';
-import { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
+
+import type { Project } from '@/types/project';
+import type { Match, Price, UseMarketplace, RetireParams } from '@/types/marketplace';
+
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
 const ENDPOINTS = {
@@ -25,41 +25,67 @@ function unwrapArray<T = unknown>(payload: unknown): T[] {
   return [];
 }
 
+// ---------- helpers para PRICES (v18) ----------
+function readString(obj: unknown, key: string): string | undefined {
+  if (!isRecord(obj)) return undefined;
+  const v = obj[key];
+  return typeof v === 'string' ? v : undefined;
+}
+
+function readNumber(obj: unknown, key: string): number | undefined {
+  if (!isRecord(obj)) return undefined;
+  const v = obj[key];
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+}
+
+/**
+ * En prices, el projectId viene como "VCS-844" dentro de:
+ *   price.listing.creditId.projectId
+ * o price.carbonPool.creditId.projectId
+ */
 function getProjectKeyFromPrice(pr: unknown): string | undefined {
   if (!isRecord(pr)) return undefined;
 
   const listing = pr.listing;
   if (isRecord(listing)) {
     const creditId = listing.creditId;
-    if (isRecord(creditId) && typeof creditId.projectId === 'string') return creditId.projectId;
-
-    const project = listing.project;
-    if (isRecord(project) && typeof project.key === 'string') return project.key;
+    if (isRecord(creditId)) {
+      const pid = readString(creditId, 'projectId') ?? readString(creditId, 'project_id');
+      if (pid) return pid; // ej "VCS-844"
+    }
   }
 
   const carbonPool = pr.carbonPool;
   if (isRecord(carbonPool)) {
     const creditId = carbonPool.creditId;
-    if (isRecord(creditId) && typeof creditId.projectId === 'string') return creditId.projectId;
+    if (isRecord(creditId)) {
+      const pid = readString(creditId, 'projectId') ?? readString(creditId, 'project_id');
+      if (pid) return pid; // ej "VCS-844"
+    }
   }
 
-  if (typeof pr.projectId === 'string') return pr.projectId;
-
-  return undefined;
+  // fallback por si algún día viene a nivel raíz
+  const rootPid = readString(pr, 'projectId') ?? readString(pr, 'project_id');
+  return rootPid;
 }
 
 function getNumericPriceFromPrice(pr: unknown): number | null {
   if (!isRecord(pr)) return null;
 
-  if (typeof pr.purchasePrice === 'number' && Number.isFinite(pr.purchasePrice))
-    return pr.purchasePrice;
-  if (typeof pr.baseUnitPrice === 'number' && Number.isFinite(pr.baseUnitPrice))
-    return pr.baseUnitPrice;
+  const purchasePrice = readNumber(pr, 'purchasePrice');
+  if (purchasePrice != null) return purchasePrice;
 
+  const baseUnitPrice = readNumber(pr, 'baseUnitPrice');
+  if (baseUnitPrice != null) return baseUnitPrice;
+
+  // fallback legacy
   const listing = pr.listing;
-  if (isRecord(listing) && typeof listing.singleUnitPrice === 'string') {
-    const n = Number(listing.singleUnitPrice);
-    if (Number.isFinite(n)) return n;
+  if (isRecord(listing)) {
+    const s = readString(listing, 'singleUnitPrice');
+    if (s) {
+      const n = Number(s);
+      if (Number.isFinite(n)) return n;
+    }
   }
 
   return null;
@@ -82,6 +108,13 @@ function computeDisplayPriceForProject(
   return min == null ? undefined : min.toFixed(2);
 }
 
+/**
+ * Normaliza Project:
+ * - images siempre array
+ * - description fallback
+ * - displayPrice desde prices (min), si no existe => p.price
+ * - selectedVintage: el primero si hay vintages
+ */
 function normalizeProject(p: Project, pricesRaw: unknown[]): Project {
   const displayFromPrices = computeDisplayPriceForProject(p.key, pricesRaw);
 
@@ -100,9 +133,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
 
-  // unknown[] para tolerar cambios de shape
   const [pricesRaw, setPricesRaw] = useState<unknown[]>([]);
-
   const [loading, setLoading] = useState<boolean>(true);
   const [isPricesLoading, setIsPricesLoading] = useState<boolean>(true);
 
@@ -113,25 +144,15 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
-  /* =========================
-     FETCH PRICES (1 vez)
-     🔥 anti-cache: _ts + no-cache headers
-  ========================== */
+  // =========================
+  // FETCH PRICES (1 vez)
+  // =========================
   useEffect(() => {
     const fetchPrices = async () => {
       try {
         setIsPricesLoading(true);
-
-        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices, {
-          params: { _ts: Date.now() }, // ✅ evita 304 y cuerpos vacíos
-          headers: {
-            'Cache-Control': 'no-cache',
-            Pragma: 'no-cache',
-          },
-        });
-
-        const list = unwrapArray<unknown>(res.data);
-        setPricesRaw(list);
+        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices);
+        setPricesRaw(unwrapArray<unknown>(res.data));
       } catch (err) {
         console.error('Error fetching prices', err);
         setPricesRaw([]);
@@ -143,24 +164,18 @@ const useMarketplace = (id?: string): UseMarketplace => {
     fetchPrices();
   }, []);
 
-  /* =========================
-     FETCH PROJECTS (LIST)
-  ========================== */
+  // =========================
+  // FETCH PROJECTS (LIST)
+  // =========================
   useEffect(() => {
     if (id) return;
 
     const fetchProjects = async () => {
       try {
         setLoading(true);
-        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects, {
-          params: { _ts: Date.now() },
-          headers: {
-            'Cache-Control': 'no-cache',
-            Pragma: 'no-cache',
-          },
-        });
-
+        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
         const list = unwrapArray<Project>(res.data);
+
         setProjects(list.map((p) => normalizeProject(p, pricesRaw)));
       } catch (err) {
         console.error('Error fetching projects', err);
@@ -173,23 +188,16 @@ const useMarketplace = (id?: string): UseMarketplace => {
     fetchProjects();
   }, [id, pricesRaw]);
 
-  /* =========================
-     FETCH SINGLE PROJECT
-  ========================== */
+  // =========================
+  // FETCH SINGLE PROJECT
+  // =========================
   useEffect(() => {
     if (!id) return;
 
     const fetchProject = async () => {
       try {
         setLoading(true);
-        const res = await axiosPublicInstance.get<Project>(ENDPOINTS.projectById(id), {
-          params: { _ts: Date.now() },
-          headers: {
-            'Cache-Control': 'no-cache',
-            Pragma: 'no-cache',
-          },
-        });
-
+        const res = await axiosPublicInstance.get<Project>(ENDPOINTS.projectById(id));
         setProject(normalizeProject(res.data, pricesRaw));
       } catch (err) {
         console.error('Error fetching project', err);
@@ -202,9 +210,9 @@ const useMarketplace = (id?: string): UseMarketplace => {
     fetchProject();
   }, [id, pricesRaw]);
 
-  /* =========================
-     FILTERED PROJECTS
-  ========================== */
+  // =========================
+  // FILTERED PROJECTS
+  // =========================
   const filteredProjects = useMemo(() => {
     let list = [...projects];
 
@@ -236,29 +244,27 @@ const useMarketplace = (id?: string): UseMarketplace => {
     return list;
   }, [projects, searchTerm, selectedCountries, selectedCategories, selectedVintages, sortBy]);
 
-  /* =========================
-     HANDLE RETIRE (BUY)
-     ✅ navega a /retireCheckout
-  ========================== */
+  // =========================
+  // HANDLE RETIRE (BUY)
+  // =========================
   const handleRetire = (params: RetireParams) => {
-    try {
-      // guardamos el project para que tus steps/checkout lo lean
-      const currentProject = project ?? projects.find((p) => p.key === params.id) ?? null;
-      if (typeof window !== 'undefined' && currentProject) {
-        localStorage.setItem('project', JSON.stringify(currentProject));
-        localStorage.setItem('selectedVintage', params.selectedVintage || '0');
-      }
+    // Guardamos project para que RetireCheckout lo use
+    const currentProject = project ?? projects.find((p) => p.key === params.id) ?? null;
 
-      const sp = new URLSearchParams();
-      sp.set('index', String(params.index));
-      sp.set('selectedVintage', params.selectedVintage || '0');
-      sp.set('price', params.priceParam || '');
-      sp.set('quantity', String(params.quantity ?? 1));
-
-      router.push(`/retireCheckout?${sp.toString()}`);
-    } catch (e) {
-      console.error('handleRetire error:', e);
+    if (typeof window !== 'undefined' && currentProject) {
+      localStorage.setItem('project', JSON.stringify(currentProject));
+      localStorage.setItem('selectedVintage', params.selectedVintage || '0');
     }
+
+    const sp = new URLSearchParams();
+    sp.set('index', String(params.index));
+    sp.set('selectedVintage', params.selectedVintage || '0');
+
+    // methodologyName: viene como array en tu JSON, así que lo saco del primero si existe
+    const firstMethName = currentProject?.methodologies?.[0]?.name ?? 'Sin metodología';
+    sp.set('methodologyName', firstMethName);
+
+    router.push(`/retireCheckout?${sp.toString()}`);
   };
 
   const availableCategories = useMemo(() => {
@@ -292,7 +298,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
 
     handleRetire,
 
-    // si tu UI tipa Price[], lo exponemos así
+    // tu UI espera Price[]; esto es seguro porque la data viene del endpoint
     prices: pricesRaw as unknown as Price[],
     isPricesLoading,
   };

@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { ListingProps } from './types';
 import { formatNumber } from '@/utils/formatNumber';
 import ListingItemSkeleton from './ListingItemSkeleton';
+import type { RetireParams } from '@/types/marketplace';
 
 const ListingItem = ({
   handleRetire,
@@ -25,49 +26,43 @@ const ListingItem = ({
   } = useRetire();
 
   const router = useRouter();
-  const [localIndex, setLocalIndex] = useState<number>(Number(contextIndex ?? 0));
+  const [localIndex, setLocalIndex] = useState<number>(contextIndex as number);
   const [defaultIndex, setDefaultIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    if (defaultIndex !== null) return;
-    if (!matches || matches.length === 0) return;
-
-    // Elegimos default: primero matchea vintage + price, si no vintage, si no 0
-    let computedIndex = matches.findIndex((match) => {
-      const matchVintage = match.listing
-        ? match.listing?.creditId?.vintage?.toString()
-        : match.carbonPool?.creditId?.vintage?.toString();
-
-      const matchPrice =
-        typeof match.purchasePrice === 'number' ? match.purchasePrice.toFixed(2) : '';
-
-      return matchVintage === (selectedVintage ?? '') && matchPrice === (displayPrice ?? '');
-    });
-
-    if (computedIndex === -1) {
-      computedIndex = matches.findIndex((match) => {
+    if (defaultIndex === null && matches.length > 0) {
+      let computedIndex = matches.findIndex((match) => {
         const matchVintage = match.listing
-          ? match.listing?.creditId?.vintage?.toString()
-          : match.carbonPool?.creditId?.vintage?.toString();
-        return matchVintage === (selectedVintage ?? '');
+          ? match.listing?.creditId?.vintage.toString()
+          : match.carbonPool?.creditId.vintage.toString();
+        const matchPrice = match.purchasePrice.toFixed(2);
+        return matchVintage === selectedVintage && matchPrice === displayPrice;
       });
+
+      if (computedIndex === -1) {
+        computedIndex = matches.findIndex((match) => {
+          const matchVintage = match.listing
+            ? match.listing?.creditId?.vintage.toString()
+            : match.carbonPool?.creditId.vintage.toString();
+          return matchVintage === selectedVintage;
+        });
+      }
+
+      if (computedIndex === -1) computedIndex = 0;
+
+      setDefaultIndex(computedIndex);
+      setLocalIndex(computedIndex);
+      setIndex(computedIndex);
     }
-
-    if (computedIndex === -1) computedIndex = 0;
-
-    setDefaultIndex(computedIndex);
-    setLocalIndex(computedIndex);
-    setIndex(computedIndex);
-    setTotalSupply(matches[computedIndex]?.supply ?? 0);
-  }, [defaultIndex, matches, selectedVintage, displayPrice, setIndex, setTotalSupply]);
+  }, [defaultIndex, matches, selectedVintage, displayPrice, setIndex]);
 
   const effectiveIndex = localIndex;
-  const selectedMatch = matches?.[effectiveIndex] || matches?.[0];
+  const selectedMatch = matches[effectiveIndex] || matches[0];
 
   const price =
     selectedMatch?.purchasePrice !== undefined
       ? selectedMatch.purchasePrice
-      : Number.parseFloat(displayPrice ?? '0');
+      : parseFloat(displayPrice ?? '0');
 
   const availableTonnes = selectedMatch?.supply ?? 0;
   const total = price * tonnesToRetire;
@@ -81,37 +76,35 @@ const ListingItem = ({
         }).format(availableTonnes) + ' ton'
       : String(availableTonnes);
 
+  const selectedMatchVintage =
+    selectedMatch?.listing?.creditId?.vintage != null
+      ? String(selectedMatch.listing.creditId.vintage)
+      : selectedMatch?.carbonPool?.creditId?.vintage != null
+      ? String(selectedMatch.carbonPool.creditId.vintage)
+      : '';
+
+  const effectivePriceParam = priceParam ?? (Number.isFinite(price) ? String(price) : '');
+
   const projectId =
     selectedMatch?.listing?.creditId?.projectId ??
     selectedMatch?.carbonPool?.creditId?.projectId ??
     '';
-
-  const selectedMatchVintage =
-    selectedMatch?.listing?.creditId?.vintage?.toString() ??
-    selectedMatch?.carbonPool?.creditId?.vintage?.toString() ??
-    selectedVintage ??
-    '';
-
-  // Si no vino priceParam por URL, usamos el precio del match seleccionado
-  const effectivePriceParam = priceParam ?? (Number.isFinite(price) ? String(price) : '');
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newIndex = Number(e.target.value);
     setLocalIndex(newIndex);
     setIndex(newIndex);
 
-    const newPrice = matches[newIndex]?.purchasePrice;
-    setTotalSupply(matches[newIndex]?.supply ?? 0);
+    const newPrice = matches[newIndex].purchasePrice;
+    setTotalSupply(matches[newIndex].supply);
 
-    // mantenemos query params para que sea shareable/estable
     router.replace(
-      `?price=${newPrice ?? ''}&vintages=${matches
+      `?price=${newPrice}&vintages=${matches
         .map((match) =>
           match.listing
-            ? match.listing?.creditId?.vintage?.toString()
-            : match.carbonPool?.creditId?.vintage?.toString()
+            ? match.listing?.creditId?.vintage.toString()
+            : match.carbonPool?.creditId.vintage.toString()
         )
-        .filter(Boolean)
         .join(',')}`
     );
   };
@@ -120,20 +113,31 @@ const ListingItem = ({
     return <ListingItemSkeleton />;
   }
 
-  const disableRetire =
-    !projectId ||
-    !effectivePriceParam ||
-    !Number.isFinite(price) ||
-    availableTonnes <= 0 ||
-    tonnesToRetire <= 0;
+  const isDisabled = !projectId || !effectivePriceParam || tonnesToRetire <= 0;
+
+  const buildRetireParams = (): RetireParams => {
+    // base (lo que tu UI ya venía usando)
+    const base = {
+      id: projectId,
+      index: effectiveIndex,
+      priceParam: effectivePriceParam,
+      selectedVintage: selectedMatchVintage || selectedVintage || '',
+    };
+
+    // Si tu RetireParams incluye quantity, lo agregamos sin romper build
+    // (usamos un type guard leve sin any)
+    const withMaybeQuantity = base as unknown as Record<string, unknown>;
+    if ('quantity' in ({} as RetireParams)) {
+      withMaybeQuantity['quantity'] = tonnesToRetire;
+      return withMaybeQuantity as unknown as RetireParams;
+    }
+
+    return base as unknown as RetireParams;
+  };
 
   return (
     <div
-      key={
-        selectedMatch?.listing?.id ||
-        selectedMatch?.carbonPool?.creditId?.creditId ||
-        effectiveIndex
-      }
+      key={selectedMatch?.listing?.id || selectedMatch?.carbonPool?.creditId?.creditId}
       className="relative pb-6 mb-8 last:mb-0 flex flex-col gap-5 h-auto"
     >
       <ListingDetail
@@ -143,7 +147,7 @@ const ListingItem = ({
             {matches.map((match, i) => {
               const matchVintage = match.listing
                 ? match.listing?.creditId?.vintage?.toString()
-                : match.carbonPool?.creditId?.vintage?.toString();
+                : match.carbonPool?.creditId.vintage.toString();
               return (
                 <option key={i} value={i}>
                   {matchVintage}
@@ -153,6 +157,7 @@ const ListingItem = ({
           </select>
         }
       />
+
       <div className="w-full h-[1px] bg-gray-300"></div>
 
       <ListingDetail
@@ -160,12 +165,13 @@ const ListingItem = ({
         value={
           <span>
             <span className="text-forestGreen font-bold font-neueMontreal text-[23px]">
-              ${Number.isFinite(price) ? price.toFixed(2) : '0.00'}
+              ${price.toFixed(2)}
             </span>{' '}
             <span className="text-customGray text-[23px] font-neueMontreal">/tCO2e</span>
           </span>
         }
       />
+
       <div className="w-full h-[1px] bg-gray-300"></div>
 
       <ListingDetail
@@ -176,14 +182,13 @@ const ListingItem = ({
           'N/A'
         }
       />
+
       <div className="w-full h-[1px] bg-gray-300"></div>
 
       <div className="flex justify-between items-center">
         <label
           htmlFor={`quantity-${
-            selectedMatch?.listing?.id ||
-            selectedMatch?.carbonPool?.creditId?.creditId ||
-            effectiveIndex
+            selectedMatch?.listing?.id || selectedMatch?.carbonPool?.creditId?.creditId
           }`}
           className="text-customGray text-[23px] font-aeonik"
         >
@@ -222,6 +227,7 @@ const ListingItem = ({
           </Link>
         </p>
       </div>
+
       <div className="w-full h-[1px] bg-gray-300"></div>
 
       <div className="flex justify-between items-center text-[23px] text-customGray">
@@ -231,16 +237,8 @@ const ListingItem = ({
 
       <button
         className="mt-2 w-full px-4 py-4 bg-mintGreen text-forestGreen font-medium font-aeonik rounded-full shadow text-[23px] z-40 disabled:opacity-50 disabled:cursor-not-allowed"
-        disabled={disableRetire}
-        onClick={() =>
-          handleRetire({
-            id: projectId,
-            index: effectiveIndex,
-            priceParam: effectivePriceParam,
-            selectedVintage: selectedMatchVintage,
-            quantity: tonnesToRetire, // ✅ esto arregla el error de types
-          })
-        }
+        disabled={isDisabled}
+        onClick={() => handleRetire(buildRetireParams())}
       >
         Retirar
       </button>
