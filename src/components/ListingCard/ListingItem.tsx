@@ -81,7 +81,7 @@ const ListingItem = ({
       ? String(selectedMatch.listing.creditId.vintage)
       : selectedMatch?.carbonPool?.creditId?.vintage != null
       ? String(selectedMatch.carbonPool.creditId.vintage)
-      : '';
+      : selectedVintage ?? '';
 
   const effectivePriceParam = priceParam ?? (Number.isFinite(price) ? String(price) : '');
 
@@ -113,26 +113,19 @@ const ListingItem = ({
     return <ListingItemSkeleton />;
   }
 
-  const isDisabled = !projectId || !effectivePriceParam || tonnesToRetire <= 0;
+  const isDisabled =
+    !projectId ||
+    !effectivePriceParam ||
+    !selectedMatchVintage ||
+    tonnesToRetire <= 0 ||
+    tonnesToRetire > availableTonnes;
 
-  const buildRetireParams = (): RetireParams => {
-    // base (lo que tu UI ya venía usando)
-    const base = {
-      id: projectId,
-      index: effectiveIndex,
-      priceParam: effectivePriceParam,
-      selectedVintage: selectedMatchVintage || selectedVintage || '',
-    };
-
-    // Si tu RetireParams incluye quantity, lo agregamos sin romper build
-    // (usamos un type guard leve sin any)
-    const withMaybeQuantity = base as unknown as Record<string, unknown>;
-    if ('quantity' in ({} as RetireParams)) {
-      withMaybeQuantity['quantity'] = tonnesToRetire;
-      return withMaybeQuantity as unknown as RetireParams;
-    }
-
-    return base as unknown as RetireParams;
+  const retireParams: RetireParams = {
+    id: projectId,
+    index: effectiveIndex,
+    priceParam: effectivePriceParam,
+    selectedVintage: selectedMatchVintage,
+    quantity: tonnesToRetire, // ✅ OBLIGATORIO (tu type lo exige)
   };
 
   return (
@@ -165,7 +158,7 @@ const ListingItem = ({
         value={
           <span>
             <span className="text-forestGreen font-bold font-neueMontreal text-[23px]">
-              ${price.toFixed(2)}
+              ${Number.isFinite(price) ? price.toFixed(2) : '0.00'}
             </span>{' '}
             <span className="text-customGray text-[23px] font-neueMontreal">/tCO2e</span>
           </span>
@@ -174,14 +167,7 @@ const ListingItem = ({
 
       <div className="w-full h-[1px] bg-gray-300"></div>
 
-      <ListingDetail
-        label="Antigüedad"
-        value={
-          selectedMatch?.listing?.creditId?.vintage ??
-          selectedMatch?.carbonPool?.creditId?.vintage ??
-          'N/A'
-        }
-      />
+      <ListingDetail label="Antigüedad" value={selectedMatchVintage || 'N/A'} />
 
       <div className="w-full h-[1px] bg-gray-300"></div>
 
@@ -238,7 +224,7 @@ const ListingItem = ({
       <button
         className="mt-2 w-full px-4 py-4 bg-mintGreen text-forestGreen font-medium font-aeonik rounded-full shadow text-[23px] z-40 disabled:opacity-50 disabled:cursor-not-allowed"
         disabled={isDisabled}
-        onClick={() => handleRetire(buildRetireParams())}
+        onClick={() => handleRetire(retireParams)}
       >
         Retirar
       </button>
