@@ -1,7 +1,12 @@
+'use client';
+
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+
 import type { Project } from '@/types/project';
 import type { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
-import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
+
+import axios from 'axios';
 
 const ENDPOINTS = {
   projects: '/api/carbon/carbonProjects',
@@ -9,29 +14,39 @@ const ENDPOINTS = {
   prices: '/api/carbon/prices',
 };
 
-type UnknownRecord = Record<string, unknown>;
+type RecordUnknown = Record<string, unknown>;
 
-function isRecord(v: unknown): v is UnknownRecord {
+function isRecord(v: unknown): v is RecordUnknown {
   return typeof v === 'object' && v !== null;
 }
 
-function unwrapArray<T>(payload: unknown): T[] {
+function unwrapArray<T = unknown>(payload: unknown): T[] {
   if (Array.isArray(payload)) return payload as T[];
   if (isRecord(payload) && Array.isArray(payload.items)) return payload.items as T[];
   if (isRecord(payload) && Array.isArray(payload.data)) return payload.data as T[];
   return [];
 }
 
-function readString(obj: unknown, key: string): string | undefined {
-  if (!isRecord(obj)) return undefined;
-  const val = obj[key];
-  return typeof val === 'string' ? val : undefined;
+// OJO: en prod, si no seteaste NEXT_PUBLIC_API_BASE_URL, esto devuelve '' y axios pega al MISMO DOMINIO.
+function getApiBaseURL(): string {
+  const raw = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
+
+  return raw.replace(/\/$/, '');
 }
 
-function readNumber(obj: unknown, key: string): number | undefined {
-  if (!isRecord(obj)) return undefined;
-  const val = obj[key];
-  return typeof val === 'number' && Number.isFinite(val) ? val : undefined;
+function getProjectStableId(p: Project): string {
+  // En tu data real suele ser p.key (ej: "VCS-191")
+  const anyP = p as unknown as Record<string, unknown>;
+  const key = typeof (p as Project).key === 'string' ? (p as Project).key : undefined;
+
+  const id =
+    typeof anyP.id === 'string'
+      ? (anyP.id as string)
+      : typeof anyP.projectId === 'string'
+      ? (anyP.projectId as string)
+      : undefined;
+
+  return key || id || '';
 }
 
 function getProjectKeyFromPrice(pr: unknown): string | undefined {
@@ -40,29 +55,19 @@ function getProjectKeyFromPrice(pr: unknown): string | undefined {
   const listing = pr.listing;
   if (isRecord(listing)) {
     const creditId = listing.creditId;
-    if (isRecord(creditId)) {
-      const pid = readString(creditId, 'projectId');
-      if (pid) return pid;
-    }
+    if (isRecord(creditId) && typeof creditId.projectId === 'string') return creditId.projectId;
 
     const project = listing.project;
-    if (isRecord(project)) {
-      const key = readString(project, 'key');
-      if (key) return key;
-    }
+    if (isRecord(project) && typeof project.key === 'string') return project.key;
   }
 
   const carbonPool = pr.carbonPool;
   if (isRecord(carbonPool)) {
     const creditId = carbonPool.creditId;
-    if (isRecord(creditId)) {
-      const pid = readString(creditId, 'projectId');
-      if (pid) return pid;
-    }
+    if (isRecord(creditId) && typeof creditId.projectId === 'string') return creditId.projectId;
   }
 
-  const direct = readString(pr, 'projectId');
-  if (direct) return direct;
+  if (typeof pr.projectId === 'string') return pr.projectId;
 
   return undefined;
 }
@@ -70,19 +75,15 @@ function getProjectKeyFromPrice(pr: unknown): string | undefined {
 function getNumericPriceFromPrice(pr: unknown): number | null {
   if (!isRecord(pr)) return null;
 
-  const purchasePrice = readNumber(pr, 'purchasePrice');
-  if (purchasePrice != null) return purchasePrice;
-
-  const baseUnitPrice = readNumber(pr, 'baseUnitPrice');
-  if (baseUnitPrice != null) return baseUnitPrice;
+  if (typeof pr.purchasePrice === 'number' && Number.isFinite(pr.purchasePrice))
+    return pr.purchasePrice;
+  if (typeof pr.baseUnitPrice === 'number' && Number.isFinite(pr.baseUnitPrice))
+    return pr.baseUnitPrice;
 
   const listing = pr.listing;
-  if (isRecord(listing)) {
-    const singleUnitPrice = listing.singleUnitPrice;
-    if (typeof singleUnitPrice === 'string') {
-      const n = Number(singleUnitPrice);
-      if (Number.isFinite(n)) return n;
-    }
+  if (isRecord(listing) && typeof listing.singleUnitPrice === 'string') {
+    const n = Number(listing.singleUnitPrice);
+    if (Number.isFinite(n)) return n;
   }
 
   return null;
@@ -92,11 +93,12 @@ function computeDisplayPriceForProject(
   projectKey: string,
   pricesRaw: unknown[]
 ): string | undefined {
+  if (!projectKey) return undefined;
+
   const matches = pricesRaw.filter((p) => getProjectKeyFromPrice(p) === projectKey);
   if (matches.length === 0) return undefined;
 
   let min: number | null = null;
-
   for (const m of matches) {
     const val = getNumericPriceFromPrice(m);
     if (val == null) continue;
@@ -107,28 +109,38 @@ function computeDisplayPriceForProject(
 }
 
 function normalizeProject(p: Project, pricesRaw: unknown[]): Project {
-  const displayFromPrices = computeDisplayPriceForProject(p.key, pricesRaw);
+  const stableId = getProjectStableId(p);
+  const displayFromPrices = computeDisplayPriceForProject(stableId, pricesRaw);
+
+  const anyP = p as unknown as Record<string, unknown>;
+  const fallbackPrice =
+    typeof anyP.price === 'string'
+      ? (anyP.price as string)
+      : typeof anyP.price === 'number'
+      ? String(anyP.price)
+      : '0';
 
   return {
     ...p,
     images: p.images ?? [],
     description: p.short_description || p.description || 'No description available',
-    displayPrice: displayFromPrices ?? p.price ?? '0',
-    selectedVintage: p.vintages?.[0],
+    displayPrice: displayFromPrices ?? (p.displayPrice as string) ?? fallbackPrice,
+    selectedVintage: (p as Project).vintages?.[0],
   };
 }
 
 const useMarketplace = (id?: string): UseMarketplace => {
+  const router = useRouter();
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
 
-  // guardamos raw como unknown[] para no romper si cambia el shape
+  // guardamos crudo para no romper si cambia el shape
   const [pricesRaw, setPricesRaw] = useState<unknown[]>([]);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [isPricesLoading, setIsPricesLoading] = useState<boolean>(true);
 
-  // ✅ estos estados son los que te faltaban (por eso el error “No value exists in scope”)
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('price_asc');
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
@@ -136,25 +148,43 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
+  // axios local (baseURL = '' => mismo dominio)
+  const api = useMemo(() => {
+    const baseURL = getApiBaseURL();
+
+    return axios.create({
+      baseURL,
+      timeout: 180000,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, []);
+
   /* =========================
      FETCH PRICES (1 vez)
   ========================== */
   useEffect(() => {
+    let alive = true;
+
     const fetchPrices = async () => {
       try {
         setIsPricesLoading(true);
-        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices);
-        setPricesRaw(unwrapArray<unknown>(res.data));
+        const res = await api.get<unknown>(ENDPOINTS.prices);
+
+        const list = unwrapArray<unknown>(res.data);
+        if (alive) setPricesRaw(list);
       } catch (err) {
         console.error('Error fetching prices', err);
-        setPricesRaw([]);
+        if (alive) setPricesRaw([]);
       } finally {
-        setIsPricesLoading(false);
+        if (alive) setIsPricesLoading(false);
       }
     };
 
     fetchPrices();
-  }, []);
+    return () => {
+      alive = false;
+    };
+  }, [api]);
 
   /* =========================
      FETCH PROJECTS (LIST)
@@ -162,22 +192,30 @@ const useMarketplace = (id?: string): UseMarketplace => {
   useEffect(() => {
     if (id) return;
 
+    let alive = true;
+
     const fetchProjects = async () => {
       try {
         setLoading(true);
-        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
+        const res = await api.get<unknown>(ENDPOINTS.projects);
         const list = unwrapArray<Project>(res.data);
-        setProjects(list.map((p) => normalizeProject(p, pricesRaw)));
+
+        const normalized = list.map((p) => normalizeProject(p, pricesRaw));
+        if (alive) setProjects(normalized);
       } catch (err) {
         console.error('Error fetching projects', err);
-        setProjects([]);
+        if (alive) setProjects([]);
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     };
 
     fetchProjects();
-  }, [id, pricesRaw]);
+
+    return () => {
+      alive = false;
+    };
+  }, [api, id, pricesRaw]);
 
   /* =========================
      FETCH SINGLE PROJECT
@@ -185,21 +223,28 @@ const useMarketplace = (id?: string): UseMarketplace => {
   useEffect(() => {
     if (!id) return;
 
+    let alive = true;
+
     const fetchProject = async () => {
       try {
         setLoading(true);
-        const res = await axiosPublicInstance.get<Project>(ENDPOINTS.projectById(id));
-        setProject(normalizeProject(res.data, pricesRaw));
+        const res = await api.get<Project>(ENDPOINTS.projectById(id));
+        const normalized = normalizeProject(res.data, pricesRaw);
+        if (alive) setProject(normalized);
       } catch (err) {
         console.error('Error fetching project', err);
-        setProject(null);
+        if (alive) setProject(null);
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     };
 
     fetchProject();
-  }, [id, pricesRaw]);
+
+    return () => {
+      alive = false;
+    };
+  }, [api, id, pricesRaw]);
 
   /* =========================
      FILTERED PROJECTS
@@ -234,8 +279,43 @@ const useMarketplace = (id?: string): UseMarketplace => {
   }, [projects, searchTerm, selectedCountries, selectedCategories, selectedVintages, sortBy]);
 
   /* =========================
-     AVAILABLE CATEGORIES
+     HANDLE RETIRE (BUY)
   ========================== */
+  const handleRetire = (params: RetireParams) => {
+    // 1) Guardamos el proyecto para que /retirementSteps lo lea después (como ya hacés)
+    const currentProject =
+      project ??
+      projects.find((p) => getProjectStableId(p) === params.id) ??
+      projects.find((p) => (p as Project).key === params.id) ??
+      null;
+
+    if (typeof window !== 'undefined') {
+      if (currentProject) localStorage.setItem('project', JSON.stringify(currentProject));
+      localStorage.setItem('selectedVintage', params.selectedVintage || '0');
+    }
+
+    // 2) Mandamos a checkout (tu ruta es /retireCheckout)
+    const sp = new URLSearchParams();
+    sp.set('index', String(params.index));
+    sp.set('selectedVintage', params.selectedVintage || '0');
+
+    // price para que el checkout tenga contexto (y para debug)
+    if (params.priceParam) sp.set('price', params.priceParam);
+
+    // methodologyName lo usa tu RetireCheckoutClient
+    const anyP = currentProject as unknown as Record<string, unknown> | null;
+    const methodologyName =
+      anyP && typeof anyP.methodology === 'string'
+        ? (anyP.methodology as string)
+        : anyP && typeof anyP.methodologyName === 'string'
+        ? (anyP.methodologyName as string)
+        : 'Sin metodología';
+
+    sp.set('methodologyName', methodologyName);
+
+    router.push(`/retireCheckout?${sp.toString()}`);
+  };
+
   const availableCategories = useMemo(() => {
     const cats = projects
       .map((p) => p.category)
@@ -243,13 +323,8 @@ const useMarketplace = (id?: string): UseMarketplace => {
     return Array.from(new Set(cats));
   }, [projects]);
 
-  /* =========================
-     HANDLE RETIRE (BUY)
-  ========================== */
-  const handleRetire = (params: RetireParams) => {
-    // acá después conectamos el flujo real (generate-quote -> create-order)
-    console.log('RETIRE / BUY:', params);
-  };
+  // casteo final: tu UI espera Price[]
+  const prices = pricesRaw as unknown as Price[];
 
   return {
     filteredProjects,
@@ -275,8 +350,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
 
     handleRetire,
 
-    // casteo seguro para tu UI (el raw se usa solo para calcular displayPrice)
-    prices: pricesRaw as unknown as Price[],
+    prices,
     isPricesLoading,
   };
 };
