@@ -79,6 +79,8 @@ export type RetireParams = {
   selectedVintage: string; // vintage elegido
   quantity: number; // ✅ obligatorio
 };
+// ✅ Compatibilidad con imports viejos (useRetirementCheckout)
+export type Listing = Price;
 
 // import { Project } from './project';
 // export interface Price {
