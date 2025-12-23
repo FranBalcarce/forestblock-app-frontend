@@ -21,11 +21,7 @@ function unwrapArray<T>(payload: unknown): T[] {
   return [];
 }
 
-/**
- * Matchea prices por project key:
- * price.listing.creditId.projectId === "VCS-844"
- * o price.carbonPool.creditId.projectId === "VCS-844"
- */
+// price.listing.creditId.projectId === "VCS-844" o price.carbonPool.creditId.projectId === "VCS-844"
 function getProjectKeyFromPrice(p: Price): string | undefined {
   return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
 }
@@ -51,8 +47,32 @@ function normalizeProject(p: Project, prices: Price[]): Project {
     images: p.images ?? [],
     description: p.short_description || p.description || 'No description available',
     displayPrice: minPrice !== null ? minPrice.toFixed(2) : p.price ?? '0',
-    selectedVintage: p.vintages?.[0],
+    selectedVintage: p.vintages?.[0] ?? '',
   };
+}
+
+// "VCS-844" -> "844"
+function extractNumericId(id: string): string {
+  const onlyNums = id.replace(/\D/g, '');
+  return onlyNums || id;
+}
+
+function findProjectByRouteId(list: Project[], routeId: string): Project | null {
+  const raw = routeId.trim();
+  const numeric = extractNumericId(raw);
+
+  // match por key exacta (VCS-844)
+  let found = list.find((p) => p.key === raw) ?? null;
+  if (found) return found;
+
+  // match por projectID (844)
+  found = list.find((p) => String(p.projectID) === numeric) ?? null;
+  if (found) return found;
+
+  // match por key case-insensitive (por si viene raro)
+  const lower = raw.toLowerCase();
+  found = list.find((p) => p.key?.toLowerCase() === lower) ?? null;
+  return found;
 }
 
 const useMarketplace = (id?: string): UseMarketplace => {
@@ -90,19 +110,25 @@ const useMarketplace = (id?: string): UseMarketplace => {
     fetchPrices();
   }, []);
 
-  // 2) projects list
+  // 2) projects (SIEMPRE: para listado y también para poder resolver el /marketplace/[id])
   useEffect(() => {
-    if (id) return;
-
     const fetchProjects = async () => {
       try {
         setLoading(true);
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
-        const list = unwrapArray<Project>(res.data);
-        setProjects(list.map((p) => normalizeProject(p, prices)));
+        const list = unwrapArray<Project>(res.data).map((p) => normalizeProject(p, prices));
+        setProjects(list);
+
+        if (id) {
+          const found = findProjectByRouteId(list, id);
+          setProject(found);
+        } else {
+          setProject(null);
+        }
       } catch (err) {
         console.error('Error fetching projects', err);
         setProjects([]);
+        setProject(null);
       } finally {
         setLoading(false);
       }
@@ -110,14 +136,6 @@ const useMarketplace = (id?: string): UseMarketplace => {
 
     fetchProjects();
   }, [id, prices]);
-
-  // si tu app usa single project por id, dejalo null sin romper
-  useEffect(() => {
-    if (!id) return;
-    // si en tu repo hay endpoint de 1 project, acá lo agregamos.
-    // por ahora lo dejamos: project null.
-    setProject(null);
-  }, [id]);
 
   const filteredProjects = useMemo(() => {
     let list = [...projects];
@@ -157,7 +175,6 @@ const useMarketplace = (id?: string): UseMarketplace => {
   }, [projects]);
 
   const handleRetire = (params: RetireParams) => {
-    // Guardamos project (si lo encontramos)
     const currentProject = project ?? projects.find((p) => p.key === params.id) ?? null;
 
     if (typeof window !== 'undefined' && currentProject) {

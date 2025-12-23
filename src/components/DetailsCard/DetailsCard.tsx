@@ -1,13 +1,13 @@
-// import React from 'react';
+import React from 'react';
 import Link from 'next/link';
-import type { DetailsCardProps } from './types';
+import { DetailsCardProps } from './types';
 import { formatNumber } from '@/utils/formatNumber';
 
 const DetailsCard: React.FC<DetailsCardProps> = ({ listing }) => {
-  const supplyRaw = listing?.supply ?? 0;
-  const supply = formatNumber(supplyRaw);
+  const supply = formatNumber(listing?.supply || 0);
 
-  const symbol = listing?.listing?.token?.symbol ?? listing?.carbonPool?.token?.symbol ?? 'N/A';
+  const tokenSymbol =
+    listing?.listing?.token?.symbol ?? listing?.carbonPool?.token?.symbol ?? 'N/A';
 
   const tokenAddress =
     listing?.listing?.token?.address ?? listing?.carbonPool?.token?.address ?? '';
@@ -18,7 +18,7 @@ const DetailsCard: React.FC<DetailsCardProps> = ({ listing }) => {
 
       <div>
         <p className="text-[17px] text-customGray font-neueMontreal">Token a retirar</p>
-        <p className="text-forestGreen font-medium text-[17px] font-neueMontreal">{symbol}</p>
+        <p className="text-forestGreen font-medium text-[17px] font-neueMontreal">{tokenSymbol}</p>
       </div>
 
       <div>
@@ -28,17 +28,15 @@ const DetailsCard: React.FC<DetailsCardProps> = ({ listing }) => {
         </p>
       </div>
 
-      {tokenAddress ? (
-        <div>
-          <Link
-            href={`https://polygonscan.com/token/${tokenAddress}`}
-            target="_blank"
-            className="text-[12px] text-customGray underline font-neueMontreal"
-          >
-            Ver en PolygonScan
-          </Link>
-        </div>
-      ) : null}
+      <div>
+        <Link
+          href={`https://polygonscan.com/token/${tokenAddress}`}
+          target="_blank"
+          className="text-[12px] text-customGray underline font-neueMontreal"
+        >
+          Ver en PolygonScan
+        </Link>
+      </div>
     </div>
   );
 };

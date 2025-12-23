@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+// src/components/ListingCard/ListingItem.tsx
+import { useEffect, useState } from 'react';
 import ListingDetail from './ListingDetail';
 import { useRetire } from '@/context/RetireContext';
 import QuantitySelector from '../QuantitySelector/QuantitySelector';
@@ -83,7 +84,9 @@ const ListingItem = ({
       ? String(selectedMatch.carbonPool.creditId.vintage)
       : selectedVintage ?? '';
 
-  const effectivePriceParam = priceParam ?? (Number.isFinite(price) ? String(Number(price)) : '');
+  // ✅ (2) guardamos price con 2 decimales para consistencia
+  const effectivePriceParam =
+    priceParam ?? (Number.isFinite(price) ? Number(price).toFixed(2) : '');
 
   const projectId =
     selectedMatch?.listing?.creditId?.projectId ??
@@ -95,11 +98,14 @@ const ListingItem = ({
     setLocalIndex(newIndex);
     setIndex(newIndex);
 
+    // ✅ (1) evitar price=undefined
     const newPrice = matches[newIndex]?.purchasePrice;
+    if (newPrice == null) return;
+
     setTotalSupply(matches[newIndex]?.supply ?? 0);
 
     router.replace(
-      `?price=${newPrice}&vintages=${matches
+      `?price=${newPrice.toFixed(2)}&vintages=${matches
         .map((match) =>
           match.listing
             ? match.listing?.creditId?.vintage?.toString()
@@ -128,10 +134,8 @@ const ListingItem = ({
   };
 
   return (
-    <div
-      key={selectedMatch?.listing?.id || selectedMatch?.carbonPool?.creditId?.creditId}
-      className="relative pb-6 mb-8 last:mb-0 flex flex-col gap-5 h-auto"
-    >
+    // ✅ (3) key no hace falta si no estás en un .map()
+    <div className="relative pb-6 mb-8 last:mb-0 flex flex-col gap-5 h-auto">
       <ListingDetail
         label="Año"
         value={
