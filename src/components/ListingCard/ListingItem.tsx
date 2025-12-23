@@ -1,10 +1,11 @@
+// src/components/ListingCard/ListingItem.tsx
 import { useEffect, useState } from 'react';
 import ListingDetail from './ListingDetail';
 import { useRetire } from '@/context/RetireContext';
 import QuantitySelector from '../QuantitySelector/QuantitySelector';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ListingProps } from './types';
+import type { ListingProps } from './types';
 import { formatNumber } from '@/utils/formatNumber';
 import ListingItemSkeleton from './ListingItemSkeleton';
 import type { RetireParams } from '@/types/marketplace';
@@ -33,18 +34,19 @@ const ListingItem = ({
     if (defaultIndex === null && matches.length > 0) {
       let computedIndex = matches.findIndex((match) => {
         const matchVintage = match.listing
-          ? match.listing?.creditId?.vintage?.toString() ?? ''
-          : match.carbonPool?.creditId?.vintage?.toString() ?? '';
-        const matchPrice = Number(match.purchasePrice).toFixed(2);
-        return matchVintage === (selectedVintage ?? '') && matchPrice === (displayPrice ?? '');
+          ? match.listing?.creditId?.vintage?.toString()
+          : match.carbonPool?.creditId?.vintage?.toString();
+
+        const matchPrice = match.purchasePrice.toFixed(2);
+        return matchVintage === selectedVintage && matchPrice === displayPrice;
       });
 
       if (computedIndex === -1) {
         computedIndex = matches.findIndex((match) => {
           const matchVintage = match.listing
-            ? match.listing?.creditId?.vintage?.toString() ?? ''
-            : match.carbonPool?.creditId?.vintage?.toString() ?? '';
-          return matchVintage === (selectedVintage ?? '');
+            ? match.listing?.creditId?.vintage?.toString()
+            : match.carbonPool?.creditId?.vintage?.toString();
+          return matchVintage === selectedVintage;
         });
       }
 
@@ -56,27 +58,24 @@ const ListingItem = ({
     }
   }, [defaultIndex, matches, selectedVintage, displayPrice, setIndex]);
 
-  if (isPricesLoading) return <ListingItemSkeleton />;
-
   const effectiveIndex = localIndex;
-  const selectedMatch = matches[effectiveIndex] ?? matches[0];
+  const selectedMatch = matches[effectiveIndex] || matches[0];
 
-  const price = selectedMatch ? Number(selectedMatch.purchasePrice) : Number(displayPrice ?? 0);
+  const price =
+    selectedMatch?.purchasePrice !== undefined
+      ? selectedMatch.purchasePrice
+      : Number(displayPrice ?? 0);
 
   const availableTonnes = selectedMatch?.supply ?? 0;
-
-  // ✅ por si el context te lo devuelve como string
-  const qty = typeof tonnesToRetire === 'number' ? tonnesToRetire : Number(tonnesToRetire);
-
-  const total = price * qty;
+  const total = price * tonnesToRetire;
   const value = formatNumber(total);
 
   const formattedValue =
     typeof availableTonnes === 'number'
-      ? `${new Intl.NumberFormat('es-ES', {
+      ? new Intl.NumberFormat('es-ES', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
-        }).format(availableTonnes)} ton`
+        }).format(availableTonnes) + ' ton'
       : String(availableTonnes);
 
   const selectedMatchVintage =
@@ -86,7 +85,6 @@ const ListingItem = ({
       ? String(selectedMatch.carbonPool.creditId.vintage)
       : selectedVintage ?? '';
 
-  // ✅ para el query param / para checkout
   const effectivePriceParam = priceParam ?? (Number.isFinite(price) ? String(price) : '');
 
   const projectId =
@@ -99,35 +97,35 @@ const ListingItem = ({
     setLocalIndex(newIndex);
     setIndex(newIndex);
 
-    const newPrice = matches[newIndex]?.purchasePrice ?? 0;
-    setTotalSupply(matches[newIndex]?.supply ?? 0);
+    const newPrice = matches[newIndex].purchasePrice;
+    setTotalSupply(matches[newIndex].supply);
 
     router.replace(
       `?price=${newPrice}&vintages=${matches
         .map((match) =>
           match.listing
-            ? match.listing?.creditId?.vintage?.toString() ?? ''
-            : match.carbonPool?.creditId?.vintage?.toString() ?? ''
+            ? match.listing?.creditId?.vintage?.toString()
+            : match.carbonPool?.creditId?.vintage?.toString()
         )
-        .filter(Boolean)
         .join(',')}`
     );
   };
+
+  if (isPricesLoading) return <ListingItemSkeleton />;
 
   const isDisabled =
     !projectId ||
     !effectivePriceParam ||
     !selectedMatchVintage ||
-    !Number.isFinite(qty) ||
-    qty <= 0 ||
-    qty > availableTonnes;
+    tonnesToRetire <= 0 ||
+    tonnesToRetire > availableTonnes;
 
   const retireParams: RetireParams = {
     id: projectId,
     index: effectiveIndex,
     priceParam: effectivePriceParam,
     selectedVintage: selectedMatchVintage,
-    quantity: qty,
+    quantity: tonnesToRetire,
   };
 
   return (
@@ -141,8 +139,8 @@ const ListingItem = ({
           <select className="w-full" onChange={handleSelectChange} value={effectiveIndex}>
             {matches.map((match, i) => {
               const matchVintage = match.listing
-                ? match.listing?.creditId?.vintage?.toString() ?? ''
-                : match.carbonPool?.creditId?.vintage?.toString() ?? '';
+                ? match.listing?.creditId?.vintage?.toString()
+                : match.carbonPool?.creditId?.vintage?.toString();
               return (
                 <option key={i} value={i}>
                   {matchVintage}
@@ -174,17 +172,10 @@ const ListingItem = ({
       <div className="w-full h-[1px] bg-gray-300" />
 
       <div className="flex justify-between items-center">
-        <label
-          htmlFor={`quantity-${
-            selectedMatch?.listing?.id || selectedMatch?.carbonPool?.creditId?.creditId
-          }`}
-          className="text-customGray text-[23px] font-aeonik"
-        >
-          Cantidad
-        </label>
+        <label className="text-customGray text-[23px] font-aeonik">Cantidad</label>
         <div className="flex flex-col items-end">
           <QuantitySelector
-            value={qty}
+            value={tonnesToRetire}
             setValue={setTonnesToRetire}
             min={0.1}
             max={availableTonnes}

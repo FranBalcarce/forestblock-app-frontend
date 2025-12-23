@@ -1,24 +1,18 @@
+// src/components/ListingCard/ListingCard.tsx
 import React from 'react';
 import ListingItem from './ListingItem';
-import { ListingProps } from './types';
+import type { ListingProps } from './types';
 
-const ListingCard: React.FC<ListingProps> = ({
+const ListingCard = ({
   handleRetire,
   matches,
   selectedVintage,
   displayPrice,
   priceParam,
   isPricesLoading,
-}) => {
-  // matches es un array: si está vacío, NO renderizamos ListingItem (ahí es donde te crashea)
+}: ListingProps) => {
   if (!matches || matches.length === 0) {
-    return (
-      <p className="text-gray-400 text-[23px] font-aeonik">
-        {isPricesLoading
-          ? 'Cargando precios...'
-          : 'No hay listings disponibles para este proyecto.'}
-      </p>
-    );
+    return <p className="text-gray-400 text-[23px] font-aeonik">No active listings available.</p>;
   }
 
   return (
