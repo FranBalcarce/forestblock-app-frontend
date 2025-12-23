@@ -1,5 +1,4 @@
-// src/components/ListingCard/ListingItem.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import ListingDetail from './ListingDetail';
 import { useRetire } from '@/context/RetireContext';
 import QuantitySelector from '../QuantitySelector/QuantitySelector';
@@ -27,7 +26,9 @@ const ListingItem = ({
   } = useRetire();
 
   const router = useRouter();
-  const [localIndex, setLocalIndex] = useState<number>(Number(contextIndex ?? 0));
+
+  const safeInitialIndex = typeof contextIndex === 'number' && contextIndex >= 0 ? contextIndex : 0;
+  const [localIndex, setLocalIndex] = useState<number>(safeInitialIndex);
   const [defaultIndex, setDefaultIndex] = useState<number | null>(null);
 
   useEffect(() => {
@@ -37,7 +38,7 @@ const ListingItem = ({
           ? match.listing?.creditId?.vintage?.toString()
           : match.carbonPool?.creditId?.vintage?.toString();
 
-        const matchPrice = match.purchasePrice.toFixed(2);
+        const matchPrice = match.purchasePrice?.toFixed(2);
         return matchVintage === selectedVintage && matchPrice === displayPrice;
       });
 
@@ -61,21 +62,18 @@ const ListingItem = ({
   const effectiveIndex = localIndex;
   const selectedMatch = matches[effectiveIndex] || matches[0];
 
-  const price =
-    selectedMatch?.purchasePrice !== undefined
-      ? selectedMatch.purchasePrice
-      : Number(displayPrice ?? 0);
-
+  const price = selectedMatch?.purchasePrice ?? Number(displayPrice ?? 0);
   const availableTonnes = selectedMatch?.supply ?? 0;
-  const total = price * tonnesToRetire;
+
+  const total = Number(price) * Number(tonnesToRetire);
   const value = formatNumber(total);
 
-  const formattedValue =
+  const formattedSupply =
     typeof availableTonnes === 'number'
-      ? new Intl.NumberFormat('es-ES', {
+      ? `${new Intl.NumberFormat('es-ES', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
-        }).format(availableTonnes) + ' ton'
+        }).format(availableTonnes)} ton`
       : String(availableTonnes);
 
   const selectedMatchVintage =
@@ -85,7 +83,7 @@ const ListingItem = ({
       ? String(selectedMatch.carbonPool.creditId.vintage)
       : selectedVintage ?? '';
 
-  const effectivePriceParam = priceParam ?? (Number.isFinite(price) ? String(price) : '');
+  const effectivePriceParam = priceParam ?? (Number.isFinite(price) ? String(Number(price)) : '');
 
   const projectId =
     selectedMatch?.listing?.creditId?.projectId ??
@@ -97,8 +95,8 @@ const ListingItem = ({
     setLocalIndex(newIndex);
     setIndex(newIndex);
 
-    const newPrice = matches[newIndex].purchasePrice;
-    setTotalSupply(matches[newIndex].supply);
+    const newPrice = matches[newIndex]?.purchasePrice;
+    setTotalSupply(matches[newIndex]?.supply ?? 0);
 
     router.replace(
       `?price=${newPrice}&vintages=${matches
@@ -107,6 +105,7 @@ const ListingItem = ({
             ? match.listing?.creditId?.vintage?.toString()
             : match.carbonPool?.creditId?.vintage?.toString()
         )
+        .filter(Boolean)
         .join(',')}`
     );
   };
@@ -125,7 +124,7 @@ const ListingItem = ({
     index: effectiveIndex,
     priceParam: effectivePriceParam,
     selectedVintage: selectedMatchVintage,
-    quantity: tonnesToRetire,
+    quantity: tonnesToRetire, // ✅ obligatorio
   };
 
   return (
@@ -158,7 +157,7 @@ const ListingItem = ({
         value={
           <span>
             <span className="text-forestGreen font-bold font-neueMontreal text-[23px]">
-              ${Number.isFinite(price) ? price.toFixed(2) : '0.00'}
+              ${Number.isFinite(price) ? Number(price).toFixed(2) : '0.00'}
             </span>{' '}
             <span className="text-customGray text-[23px] font-neueMontreal">/tCO2e</span>
           </span>
@@ -186,7 +185,7 @@ const ListingItem = ({
       </div>
 
       <div className="w-full h-[1px] bg-gray-300" />
-      <ListingDetail label="Available tonnes" value={formattedValue} />
+      <ListingDetail label="Available tonnes" value={formattedSupply} />
       <div className="w-full h-[1px] bg-gray-300" />
 
       <div className="flex justify-between items-center">

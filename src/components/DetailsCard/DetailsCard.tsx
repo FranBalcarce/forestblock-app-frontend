@@ -1,13 +1,13 @@
-import React from 'react';
+// import React from 'react';
 import Link from 'next/link';
-import { DetailsCardProps } from './types';
+import type { DetailsCardProps } from './types';
 import { formatNumber } from '@/utils/formatNumber';
 
 const DetailsCard: React.FC<DetailsCardProps> = ({ listing }) => {
-  // supply puede ser number/string según tu formatNumber, así que lo manejamos safe
-  const supplyFormatted = formatNumber(listing?.supply ?? 0);
+  const supplyRaw = listing?.supply ?? 0;
+  const supply = formatNumber(supplyRaw);
 
-  const tokenSymbol = listing?.listing?.token?.symbol ?? listing?.carbonPool?.token?.symbol ?? '';
+  const symbol = listing?.listing?.token?.symbol ?? listing?.carbonPool?.token?.symbol ?? 'N/A';
 
   const tokenAddress =
     listing?.listing?.token?.address ?? listing?.carbonPool?.token?.address ?? '';
@@ -18,34 +18,27 @@ const DetailsCard: React.FC<DetailsCardProps> = ({ listing }) => {
 
       <div>
         <p className="text-[17px] text-customGray font-neueMontreal">Token a retirar</p>
-        <p className="text-forestGreen font-medium text-[17px] font-neueMontreal">
-          {tokenSymbol || '-'}
-        </p>
+        <p className="text-forestGreen font-medium text-[17px] font-neueMontreal">{symbol}</p>
       </div>
 
       <div>
         <p className="text-[17px] text-customGray font-neueMontreal">Disponible para retirar</p>
         <p className="text-forestGreen font-medium font-neueMontreal text-[17px]">
-          {String(supplyFormatted)} toneladas
+          {typeof supply === 'number' ? formatNumber(supply) : supply} toneladas
         </p>
       </div>
 
-      <div>
-        {tokenAddress ? (
+      {tokenAddress ? (
+        <div>
           <Link
             href={`https://polygonscan.com/token/${tokenAddress}`}
-            passHref
             target="_blank"
             className="text-[12px] text-customGray underline font-neueMontreal"
           >
             Ver en PolygonScan
           </Link>
-        ) : (
-          <span className="text-[12px] text-customGray font-neueMontreal">
-            Sin address disponible
-          </span>
-        )}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 };
