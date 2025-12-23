@@ -21,7 +21,6 @@ function unwrapArray<T>(payload: unknown): T[] {
   return [];
 }
 
-// price.listing.creditId.projectId === "VCS-844" o price.carbonPool.creditId.projectId === "VCS-844"
 function getProjectKeyFromPrice(p: Price): string | undefined {
   return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
 }
@@ -47,32 +46,16 @@ function normalizeProject(p: Project, prices: Price[]): Project {
     images: p.images ?? [],
     description: p.short_description || p.description || 'No description available',
     displayPrice: minPrice !== null ? minPrice.toFixed(2) : p.price ?? '0',
-    selectedVintage: p.vintages?.[0] ?? '',
+    selectedVintage: p.vintages?.[0],
   };
 }
 
-// "VCS-844" -> "844"
-function extractNumericId(id: string): string {
-  const onlyNums = id.replace(/\D/g, '');
-  return onlyNums || id;
-}
-
-function findProjectByRouteId(list: Project[], routeId: string): Project | null {
-  const raw = routeId.trim();
-  const numeric = extractNumericId(raw);
-
-  // match por key exacta (VCS-844)
-  let found = list.find((p) => p.key === raw) ?? null;
-  if (found) return found;
-
-  // match por projectID (844)
-  found = list.find((p) => String(p.projectID) === numeric) ?? null;
-  if (found) return found;
-
-  // match por key case-insensitive (por si viene raro)
-  const lower = raw.toLowerCase();
-  found = list.find((p) => p.key?.toLowerCase() === lower) ?? null;
-  return found;
+function normalizeId(id: string) {
+  const raw = (id || '').trim();
+  const upper = raw.toUpperCase();
+  // si viene "VCS-844" -> "844"
+  const numeric = upper.includes('-') ? upper.split('-').pop() ?? raw : raw;
+  return { raw, upper, numeric };
 }
 
 const useMarketplace = (id?: string): UseMarketplace => {
@@ -92,7 +75,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
-  // 1) prices
+  // 1) PRICES
   useEffect(() => {
     const fetchPrices = async () => {
       try {
@@ -110,35 +93,50 @@ const useMarketplace = (id?: string): UseMarketplace => {
     fetchPrices();
   }, []);
 
-  // 2) projects (SIEMPRE: para listado y también para poder resolver el /marketplace/[id])
+  // 2) PROJECTS (siempre)
   useEffect(() => {
     const fetchProjects = async () => {
       try {
         setLoading(true);
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
-        const list = unwrapArray<Project>(res.data).map((p) => normalizeProject(p, prices));
+        const list = unwrapArray<Project>(res.data);
+        // OJO: todavía no normalizo acá, porque depende de prices (que puede llegar después)
         setProjects(list);
-
-        if (id) {
-          const found = findProjectByRouteId(list, id);
-          setProject(found);
-        } else {
-          setProject(null);
-        }
       } catch (err) {
         console.error('Error fetching projects', err);
         setProjects([]);
-        setProject(null);
       } finally {
         setLoading(false);
       }
     };
 
     fetchProjects();
-  }, [id, prices]);
+  }, []);
+
+  // 3) Proyectos normalizados (cuando cambian prices o projects)
+  const normalizedProjects = useMemo(() => {
+    return projects.map((p) => normalizeProject(p, prices));
+  }, [projects, prices]);
+
+  // 4) Si hay id, seteo el project desde la lista (por key o projectID)
+  useEffect(() => {
+    if (!id) {
+      setProject(null);
+      return;
+    }
+
+    const { upper, numeric } = normalizeId(id);
+
+    const found =
+      normalizedProjects.find((p) => p.key?.toUpperCase() === upper) ??
+      normalizedProjects.find((p) => String(p.projectID) === String(numeric)) ??
+      null;
+
+    setProject(found);
+  }, [id, normalizedProjects]);
 
   const filteredProjects = useMemo(() => {
-    let list = [...projects];
+    let list = [...normalizedProjects];
 
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
@@ -165,17 +163,24 @@ const useMarketplace = (id?: string): UseMarketplace => {
     }
 
     return list;
-  }, [projects, searchTerm, selectedCountries, selectedCategories, selectedVintages, sortBy]);
+  }, [
+    normalizedProjects,
+    searchTerm,
+    selectedCountries,
+    selectedCategories,
+    selectedVintages,
+    sortBy,
+  ]);
 
   const availableCategories = useMemo(() => {
-    const cats = projects
+    const cats = normalizedProjects
       .map((p) => p.category)
       .filter((c): c is string => typeof c === 'string' && c.length > 0);
     return Array.from(new Set(cats));
-  }, [projects]);
+  }, [normalizedProjects]);
 
   const handleRetire = (params: RetireParams) => {
-    const currentProject = project ?? projects.find((p) => p.key === params.id) ?? null;
+    const currentProject = project ?? normalizedProjects.find((p) => p.key === params.id) ?? null;
 
     if (typeof window !== 'undefined' && currentProject) {
       localStorage.setItem('project', JSON.stringify(currentProject));
@@ -213,8 +218,8 @@ const useMarketplace = (id?: string): UseMarketplace => {
     sortBy,
     setSortBy,
 
-    projects,
-    setProjects,
+    projects: normalizedProjects,
+    setProjects, // (si lo usás en otro lado)
     project,
 
     handleRetire,

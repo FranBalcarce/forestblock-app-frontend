@@ -1,8 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-
 import ProjectInfo from '@/components/ProjectInfo/ProjectInfo';
 import useMarketplace from '@/hooks/useMarketplace';
 import LoaderScreenDynamic from '@/components/LoaderScreen/LoaderScreenDynamic';
@@ -18,26 +17,14 @@ export default function MarketplaceByIdClient({ id }: Props) {
   const searchParams = useSearchParams();
   const priceParam = searchParams.get('price');
 
-  const { project, loading, handleRetire, prices, isPricesLoading } = useMarketplace(id);
+  const { project, handleRetire, prices, isPricesLoading, loading } = useMarketplace(id);
 
-  if (loading) return <LoaderScreenDynamic />;
+  if (loading && !project) return <LoaderScreenDynamic />;
+  if (!project) return <LoaderScreenDynamic />;
 
-  if (!project) {
-    const normalized = id.replace(/\D/g, '') || id;
-    return (
-      <div className="p-10 text-center">
-        <h2 className="text-xl font-semibold">Proyecto no encontrado</h2>
-        <p className="text-sm text-gray-500 mt-2">
-          ID recibido: {id} — Normalizado: {normalized}
-        </p>
-        <p className="text-sm text-gray-500 mt-2">
-          Probá volver al marketplace o revisá que el ID coincida con el que devuelve la API.
-        </p>
-      </div>
-    );
-  }
-
-  const matches = prices?.filter((p) => getProjectIdFromPrice(p) === project.key) ?? [];
+  const matches = useMemo(() => {
+    return prices?.filter((p) => getProjectIdFromPrice(p) === project.key) ?? [];
+  }, [prices, project.key]);
 
   const selectedPriceObj = priceParam
     ? matches.find((p) => String(p.purchasePrice) === String(priceParam))
@@ -45,7 +32,7 @@ export default function MarketplaceByIdClient({ id }: Props) {
 
   const displayPrice = selectedPriceObj
     ? selectedPriceObj.purchasePrice.toFixed(2)
-    : project.displayPrice ?? project.price ?? '';
+    : project.displayPrice ?? project.price ?? '0';
 
   const selectedVintage = selectedPriceObj
     ? selectedPriceObj.listing?.creditId?.vintage?.toString() ||
