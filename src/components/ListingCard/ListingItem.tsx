@@ -26,25 +26,25 @@ const ListingItem = ({
   } = useRetire();
 
   const router = useRouter();
-  const [localIndex, setLocalIndex] = useState<number>(contextIndex as number);
+  const [localIndex, setLocalIndex] = useState<number>(Number(contextIndex ?? 0));
   const [defaultIndex, setDefaultIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (defaultIndex === null && matches.length > 0) {
       let computedIndex = matches.findIndex((match) => {
         const matchVintage = match.listing
-          ? match.listing?.creditId?.vintage.toString()
-          : match.carbonPool?.creditId.vintage.toString();
-        const matchPrice = match.purchasePrice.toFixed(2);
-        return matchVintage === selectedVintage && matchPrice === displayPrice;
+          ? match.listing?.creditId?.vintage?.toString() ?? ''
+          : match.carbonPool?.creditId?.vintage?.toString() ?? '';
+        const matchPrice = Number(match.purchasePrice).toFixed(2);
+        return matchVintage === (selectedVintage ?? '') && matchPrice === (displayPrice ?? '');
       });
 
       if (computedIndex === -1) {
         computedIndex = matches.findIndex((match) => {
           const matchVintage = match.listing
-            ? match.listing?.creditId?.vintage.toString()
-            : match.carbonPool?.creditId.vintage.toString();
-          return matchVintage === selectedVintage;
+            ? match.listing?.creditId?.vintage?.toString() ?? ''
+            : match.carbonPool?.creditId?.vintage?.toString() ?? '';
+          return matchVintage === (selectedVintage ?? '');
         });
       }
 
@@ -56,24 +56,27 @@ const ListingItem = ({
     }
   }, [defaultIndex, matches, selectedVintage, displayPrice, setIndex]);
 
-  const effectiveIndex = localIndex;
-  const selectedMatch = matches[effectiveIndex] || matches[0];
+  if (isPricesLoading) return <ListingItemSkeleton />;
 
-  const price =
-    selectedMatch?.purchasePrice !== undefined
-      ? selectedMatch.purchasePrice
-      : parseFloat(displayPrice ?? '0');
+  const effectiveIndex = localIndex;
+  const selectedMatch = matches[effectiveIndex] ?? matches[0];
+
+  const price = selectedMatch ? Number(selectedMatch.purchasePrice) : Number(displayPrice ?? 0);
 
   const availableTonnes = selectedMatch?.supply ?? 0;
-  const total = price * tonnesToRetire;
+
+  // ✅ por si el context te lo devuelve como string
+  const qty = typeof tonnesToRetire === 'number' ? tonnesToRetire : Number(tonnesToRetire);
+
+  const total = price * qty;
   const value = formatNumber(total);
 
   const formattedValue =
     typeof availableTonnes === 'number'
-      ? new Intl.NumberFormat('es-ES', {
+      ? `${new Intl.NumberFormat('es-ES', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
-        }).format(availableTonnes) + ' ton'
+        }).format(availableTonnes)} ton`
       : String(availableTonnes);
 
   const selectedMatchVintage =
@@ -83,6 +86,7 @@ const ListingItem = ({
       ? String(selectedMatch.carbonPool.creditId.vintage)
       : selectedVintage ?? '';
 
+  // ✅ para el query param / para checkout
   const effectivePriceParam = priceParam ?? (Number.isFinite(price) ? String(price) : '');
 
   const projectId =
@@ -95,37 +99,35 @@ const ListingItem = ({
     setLocalIndex(newIndex);
     setIndex(newIndex);
 
-    const newPrice = matches[newIndex].purchasePrice;
-    setTotalSupply(matches[newIndex].supply);
+    const newPrice = matches[newIndex]?.purchasePrice ?? 0;
+    setTotalSupply(matches[newIndex]?.supply ?? 0);
 
     router.replace(
       `?price=${newPrice}&vintages=${matches
         .map((match) =>
           match.listing
-            ? match.listing?.creditId?.vintage.toString()
-            : match.carbonPool?.creditId.vintage.toString()
+            ? match.listing?.creditId?.vintage?.toString() ?? ''
+            : match.carbonPool?.creditId?.vintage?.toString() ?? ''
         )
+        .filter(Boolean)
         .join(',')}`
     );
   };
-
-  if (isPricesLoading) {
-    return <ListingItemSkeleton />;
-  }
 
   const isDisabled =
     !projectId ||
     !effectivePriceParam ||
     !selectedMatchVintage ||
-    tonnesToRetire <= 0 ||
-    tonnesToRetire > availableTonnes;
+    !Number.isFinite(qty) ||
+    qty <= 0 ||
+    qty > availableTonnes;
 
   const retireParams: RetireParams = {
     id: projectId,
     index: effectiveIndex,
     priceParam: effectivePriceParam,
     selectedVintage: selectedMatchVintage,
-    quantity: tonnesToRetire, // ✅ OBLIGATORIO (tu type lo exige)
+    quantity: qty,
   };
 
   return (
@@ -139,8 +141,8 @@ const ListingItem = ({
           <select className="w-full" onChange={handleSelectChange} value={effectiveIndex}>
             {matches.map((match, i) => {
               const matchVintage = match.listing
-                ? match.listing?.creditId?.vintage?.toString()
-                : match.carbonPool?.creditId.vintage.toString();
+                ? match.listing?.creditId?.vintage?.toString() ?? ''
+                : match.carbonPool?.creditId?.vintage?.toString() ?? '';
               return (
                 <option key={i} value={i}>
                   {matchVintage}
@@ -151,7 +153,7 @@ const ListingItem = ({
         }
       />
 
-      <div className="w-full h-[1px] bg-gray-300"></div>
+      <div className="w-full h-[1px] bg-gray-300" />
 
       <ListingDetail
         label="Precio"
@@ -165,11 +167,11 @@ const ListingItem = ({
         }
       />
 
-      <div className="w-full h-[1px] bg-gray-300"></div>
+      <div className="w-full h-[1px] bg-gray-300" />
 
       <ListingDetail label="Antigüedad" value={selectedMatchVintage || 'N/A'} />
 
-      <div className="w-full h-[1px] bg-gray-300"></div>
+      <div className="w-full h-[1px] bg-gray-300" />
 
       <div className="flex justify-between items-center">
         <label
@@ -182,7 +184,7 @@ const ListingItem = ({
         </label>
         <div className="flex flex-col items-end">
           <QuantitySelector
-            value={tonnesToRetire}
+            value={qty}
             setValue={setTonnesToRetire}
             min={0.1}
             max={availableTonnes}
@@ -192,9 +194,9 @@ const ListingItem = ({
         </div>
       </div>
 
-      <div className="w-full h-[1px] bg-gray-300"></div>
+      <div className="w-full h-[1px] bg-gray-300" />
       <ListingDetail label="Available tonnes" value={formattedValue} />
-      <div className="w-full h-[1px] bg-gray-300"></div>
+      <div className="w-full h-[1px] bg-gray-300" />
 
       <div className="flex justify-between items-center">
         <p className="text-customGray text-[23px] font-aeonik">Asset</p>
@@ -214,7 +216,7 @@ const ListingItem = ({
         </p>
       </div>
 
-      <div className="w-full h-[1px] bg-gray-300"></div>
+      <div className="w-full h-[1px] bg-gray-300" />
 
       <div className="flex justify-between items-center text-[23px] text-customGray">
         <span className="font-aeonik">Total</span>
