@@ -1,3 +1,4 @@
+// src/components/Marketplace/MarketplaceByIdClient.tsx
 'use client';
 
 import React from 'react';
@@ -5,69 +6,71 @@ import { useSearchParams } from 'next/navigation';
 import ProjectInfo from '@/components/ProjectInfo/ProjectInfo';
 import useMarketplace from '@/hooks/useMarketplace';
 import LoaderScreenDynamic from '@/components/LoaderScreen/LoaderScreenDynamic';
-import { Price } from '@/types/marketplace';
+import type { Price } from '@/types/marketplace';
+import type { Project } from '@/types/project';
 
 type Props = { id: string };
 
 const getProjectIdFromPrice = (p: Price): string | undefined => {
-  // En tu response: listing.creditId.projectId viene tipo "VCS-191"
   return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
 };
 
-const normalizeProjectKeyToId = (key?: string | null): string => {
-  if (!key) return '';
-  // "VCS-844" -> "844"
-  const parts = key.split('-');
-  const last = parts[parts.length - 1];
-  return last ?? key;
+const getVintageFromPrice = (p: Price): string | undefined => {
+  const v = p.listing?.creditId?.vintage ?? p.carbonPool?.creditId?.vintage;
+  return v != null ? String(v) : undefined;
+};
+
+const getProjectIdCandidates = (project: Project): string[] => {
+  // En tu JSON vi project.key = "VCS-844" y project.projectID = "844"
+  // En prices a veces viene "VCS-191" u otro id, por eso armamos candidatos típicos.
+  const key = project.key ? String(project.key) : '';
+  const projectID = (project as { projectID?: string | number }).projectID;
+  const pid = projectID != null ? String(projectID) : '';
+
+  const candidates = new Set<string>();
+  if (key) candidates.add(key);
+  if (pid) candidates.add(pid);
+  if (pid) candidates.add(`VCS-${pid}`);
+
+  // por las dudas, si el key viniera sin prefijo
+  if (key.startsWith('VCS-')) candidates.add(key.replace('VCS-', ''));
+
+  return Array.from(candidates).filter(Boolean);
 };
 
 export default function MarketplaceByIdClient({ id }: Props) {
   const searchParams = useSearchParams();
-  const priceParam = searchParams.get('price');
+  const priceParam = searchParams.get('price'); // string | null
 
   const { project, handleRetire, prices, isPricesLoading } = useMarketplace(id);
 
   if (!project) return <LoaderScreenDynamic />;
 
-  // ✅ IDs posibles del proyecto (para matchear correctamente prices)
-  const projectIdFromKey = normalizeProjectKeyToId(project.key); // "844"
-  const projectIdFromField =
-    (project as any).projectID?.toString?.() ?? (project as any).projectId?.toString?.() ?? ''; // "844" si existe en tu tipo
+  // ✅ Matching robusto (sin any)
+  const candidates = getProjectIdCandidates(project);
 
-  const acceptableIds = new Set(
-    [project.key, projectIdFromKey, projectIdFromField].filter(Boolean)
-  );
-
-  // ✅ matches correctos
   const matches =
-    prices?.filter((p) => {
+    prices?.filter((p: Price) => {
       const pid = getProjectIdFromPrice(p);
-      if (!pid) return false;
-
-      // pid puede venir "VCS-844" o "844" dependiendo backend
-      const pidNormalized = normalizeProjectKeyToId(pid);
-
-      return acceptableIds.has(pid) || acceptableIds.has(pidNormalized);
+      return pid ? candidates.includes(pid) : false;
     }) ?? [];
 
-  // ✅ si viene ?price=... lo usamos para elegir un match específico
-  const selectedPriceObj = priceParam
-    ? matches.find((p) => String(p.purchasePrice) === String(priceParam))
+  // si te pasan ?price=... elegimos el objeto que matchee ese precio
+  const selectedPriceObj: Price | null = priceParam
+    ? matches.find((p: Price) => String(p.purchasePrice) === String(priceParam)) ?? null
     : null;
 
-  // ✅ precio a mostrar: si hay matches, priorizamos el purchasePrice del primer match
-  const baseMatch = selectedPriceObj ?? matches[0] ?? null;
+  const displayPrice: string =
+    selectedPriceObj != null
+      ? Number(selectedPriceObj.purchasePrice).toFixed(2)
+      : (project as { displayPrice?: string }).displayPrice ??
+        (project as { price?: string }).price ??
+        '';
 
-  const displayPrice = baseMatch
-    ? baseMatch.purchasePrice.toFixed(2)
-    : (project as any).displayPrice ?? (project as any).price ?? '';
-
-  const selectedVintage = baseMatch
-    ? baseMatch.listing?.creditId?.vintage?.toString() ||
-      baseMatch.carbonPool?.creditId?.vintage?.toString() ||
-      ''
-    : (project as any).selectedVintage ?? '';
+  const selectedVintage: string =
+    selectedPriceObj != null
+      ? getVintageFromPrice(selectedPriceObj) ?? ''
+      : (project as { selectedVintage?: string }).selectedVintage ?? '';
 
   return (
     <div className="flex gap-10 p-5 overflow-hidden md:overflow-visible min-h-screen">
