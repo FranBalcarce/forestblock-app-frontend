@@ -4,13 +4,7 @@ import MarketplaceByIdClient from '@/components/Marketplace/MarketplaceByIdClien
 
 export const dynamic = 'force-dynamic';
 
-type MarketplacePageProps = {
-  params: {
-    id: string;
-  };
-};
-
-export default function MarketplaceByIdPage({ params }: MarketplacePageProps) {
+export default function MarketplaceByIdPage({ params }: { params: { id: string } }) {
   const { id } = params;
 
   return (
