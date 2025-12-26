@@ -1,16 +1,11 @@
-import { Suspense } from 'react';
 import MarketplaceByIdClient from '@/components/Marketplace/MarketplaceByIdClient';
 
-export const dynamic = 'force-dynamic';
+type PageProps = {
+  params: { id: string };
+};
 
-export default async function MarketplaceByIdPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-
-  return (
-    <Suspense fallback={null}>
-      <MarketplaceByIdClient id={id} />
-    </Suspense>
-  );
+export default function MarketplaceByIdPage({ params }: PageProps) {
+  return <MarketplaceByIdClient id={params.id} />;
 }
 
 // import { Suspense } from 'react';

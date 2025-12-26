@@ -21,6 +21,11 @@ function unwrapArray<T>(payload: unknown): T[] {
   return [];
 }
 
+/**
+ * Matchea prices por project key:
+ * price.listing.creditId.projectId === "VCS-844"
+ * o price.carbonPool.creditId.projectId === "VCS-844"
+ */
 function getProjectKeyFromPrice(p: Price): string | undefined {
   return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
 }
@@ -50,14 +55,6 @@ function normalizeProject(p: Project, prices: Price[]): Project {
   };
 }
 
-function normalizeId(id: string) {
-  const raw = (id || '').trim();
-  const upper = raw.toUpperCase();
-  // si viene "VCS-844" -> "844"
-  const numeric = upper.includes('-') ? upper.split('-').pop() ?? raw : raw;
-  return { raw, upper, numeric };
-}
-
 const useMarketplace = (id?: string): UseMarketplace => {
   const router = useRouter();
 
@@ -75,7 +72,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
-  // 1) PRICES
+  // 1) precios
   useEffect(() => {
     const fetchPrices = async () => {
       try {
@@ -93,50 +90,34 @@ const useMarketplace = (id?: string): UseMarketplace => {
     fetchPrices();
   }, []);
 
-  // 2) PROJECTS (siempre)
+  // 2) projects (lista +, si hay id, el project puntual)
   useEffect(() => {
     const fetchProjects = async () => {
       try {
         setLoading(true);
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
-        const list = unwrapArray<Project>(res.data);
-        // OJO: todavía no normalizo acá, porque depende de prices (que puede llegar después)
+        const list = unwrapArray<Project>(res.data).map((p) => normalizeProject(p, prices));
+
         setProjects(list);
+
+        if (id) {
+          const found = list.find((p) => p.key === id);
+          setProject(found ?? null);
+        }
       } catch (err) {
         console.error('Error fetching projects', err);
         setProjects([]);
+        if (id) setProject(null);
       } finally {
         setLoading(false);
       }
     };
 
     fetchProjects();
-  }, []);
-
-  // 3) Proyectos normalizados (cuando cambian prices o projects)
-  const normalizedProjects = useMemo(() => {
-    return projects.map((p) => normalizeProject(p, prices));
-  }, [projects, prices]);
-
-  // 4) Si hay id, seteo el project desde la lista (por key o projectID)
-  useEffect(() => {
-    if (!id) {
-      setProject(null);
-      return;
-    }
-
-    const { upper, numeric } = normalizeId(id);
-
-    const found =
-      normalizedProjects.find((p) => p.key?.toUpperCase() === upper) ??
-      normalizedProjects.find((p) => String(p.projectID) === String(numeric)) ??
-      null;
-
-    setProject(found);
-  }, [id, normalizedProjects]);
+  }, [id, prices]);
 
   const filteredProjects = useMemo(() => {
-    let list = [...normalizedProjects];
+    let list = [...projects];
 
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
@@ -163,24 +144,17 @@ const useMarketplace = (id?: string): UseMarketplace => {
     }
 
     return list;
-  }, [
-    normalizedProjects,
-    searchTerm,
-    selectedCountries,
-    selectedCategories,
-    selectedVintages,
-    sortBy,
-  ]);
+  }, [projects, searchTerm, selectedCountries, selectedCategories, selectedVintages, sortBy]);
 
   const availableCategories = useMemo(() => {
-    const cats = normalizedProjects
+    const cats = projects
       .map((p) => p.category)
       .filter((c): c is string => typeof c === 'string' && c.length > 0);
     return Array.from(new Set(cats));
-  }, [normalizedProjects]);
+  }, [projects]);
 
   const handleRetire = (params: RetireParams) => {
-    const currentProject = project ?? normalizedProjects.find((p) => p.key === params.id) ?? null;
+    const currentProject = project ?? projects.find((p) => p.key === params.id) ?? null;
 
     if (typeof window !== 'undefined' && currentProject) {
       localStorage.setItem('project', JSON.stringify(currentProject));
@@ -218,8 +192,8 @@ const useMarketplace = (id?: string): UseMarketplace => {
     sortBy,
     setSortBy,
 
-    projects: normalizedProjects,
-    setProjects, // (si lo usás en otro lado)
+    projects,
+    setProjects,
     project,
 
     handleRetire,
