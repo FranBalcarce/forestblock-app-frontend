@@ -3,14 +3,15 @@ import { useRouter } from 'next/navigation';
 
 import type { Project } from '@/types/project';
 import type { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
-
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
+/* ======================= ENDPOINTS ======================= */
 const ENDPOINTS = {
   projects: '/api/carbon/carbonProjects',
   prices: '/api/carbon/prices',
 };
 
+/* ======================= HELPERS ======================= */
 type UnknownRecord = Record<string, unknown>;
 const isRecord = (v: unknown): v is UnknownRecord => typeof v === 'object' && v !== null;
 
@@ -21,34 +22,12 @@ function unwrapArray<T>(payload: unknown): T[] {
   return [];
 }
 
-/* ------------------------------------------------------------------ */
-/* Helpers para matchear projects <-> prices                          */
-/* ------------------------------------------------------------------ */
-
-// normaliza cualquier id a formato "VCS-<n>"
-const normalizeProjectKey = (raw?: string | number | null): string | undefined => {
-  if (raw === undefined || raw === null) return undefined;
-  const s = String(raw);
-  if (s.startsWith('VCS-')) return s;
-  return `VCS-${s}`;
-};
-
-/**
- * Matchea prices por project key:
- * price.listing.creditId.projectId === "VCS-844"
- * o price.carbonPool.creditId.projectId === "VCS-844"
- * o "844" (que normalizamos a "VCS-844")
- */
 function getProjectKeyFromPrice(p: Price): string | undefined {
-  const raw = p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
-  return normalizeProjectKey(raw);
+  return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
 }
 
 function computeMinPriceForProject(projectKey: string, prices: Price[]): number | null {
-  const normalizedKey = normalizeProjectKey(projectKey);
-  if (!normalizedKey) return null;
-
-  const filtered = prices.filter((p) => getProjectKeyFromPrice(p) === normalizedKey);
+  const filtered = prices.filter((p) => getProjectKeyFromPrice(p) === projectKey);
   if (!filtered.length) return null;
 
   let min: number | null = null;
@@ -67,22 +46,22 @@ function normalizeProject(p: Project, prices: Price[]): Project {
     ...p,
     images: p.images ?? [],
     description: p.short_description || p.description || 'No description available',
-    displayPrice: minPrice !== null ? minPrice.toFixed(2) : p.price ?? '0',
+    displayPrice: minPrice !== null ? minPrice.toFixed(2) : String(p.price ?? '0'),
     selectedVintage: p.vintages?.[0],
   };
 }
 
-/* ------------------------------------------------------------------ */
+/* ======================= MAIN HOOK ======================= */
 
-const useMarketplace = (_id?: string): UseMarketplace => {
+const useMarketplace = (id?: string): UseMarketplace => {
   const router = useRouter();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
 
   const [prices, setPrices] = useState<Price[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [isPricesLoading, setIsPricesLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+  const [isPricesLoading, setIsPricesLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('price_asc');
@@ -91,7 +70,7 @@ const useMarketplace = (_id?: string): UseMarketplace => {
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
-  // 1) precios
+  /* ==================== 1) Load Prices ==================== */
   useEffect(() => {
     const fetchPrices = async () => {
       try {
@@ -99,17 +78,16 @@ const useMarketplace = (_id?: string): UseMarketplace => {
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices);
         setPrices(unwrapArray<Price>(res.data));
       } catch (err) {
-        console.error('Error fetching prices', err);
+        console.error('❌ Error fetching prices', err);
         setPrices([]);
       } finally {
         setIsPricesLoading(false);
       }
     };
-
     fetchPrices();
   }, []);
 
-  // 2) projects (lista completa, se normalizan con los prices)
+  /* ==================== 2) Load Projects ==================== */
   useEffect(() => {
     const fetchProjects = async () => {
       try {
@@ -118,20 +96,19 @@ const useMarketplace = (_id?: string): UseMarketplace => {
         const list = unwrapArray<Project>(res.data).map((p) => normalizeProject(p, prices));
 
         setProjects(list);
-        // dejamos project en null; se resuelve en el detalle usando projects + id de la ruta
-        setProject(null);
+        if (id) setProject(list.find((p) => p.key === id) ?? null);
       } catch (err) {
-        console.error('Error fetching projects', err);
+        console.error('❌ Error fetching projects', err);
         setProjects([]);
-        setProject(null);
+        if (id) setProject(null);
       } finally {
         setLoading(false);
       }
     };
-
     fetchProjects();
-  }, [prices]);
+  }, [id, prices]);
 
+  /* ==================== Filtering & Sorting ==================== */
   const filteredProjects = useMemo(() => {
     let list = [...projects];
 
@@ -153,42 +130,37 @@ const useMarketplace = (_id?: string): UseMarketplace => {
     }
 
     if (sortBy === 'price_asc') {
-      list.sort((a, b) => Number(a.displayPrice ?? 0) - Number(b.displayPrice ?? 0));
+      list.sort((a, b) => Number(a.displayPrice) - Number(b.displayPrice));
     }
     if (sortBy === 'price_desc') {
-      list.sort((a, b) => Number(b.displayPrice ?? 0) - Number(a.displayPrice ?? 0));
+      list.sort((a, b) => Number(b.displayPrice) - Number(a.displayPrice));
     }
 
     return list;
   }, [projects, searchTerm, selectedCountries, selectedCategories, selectedVintages, sortBy]);
 
   const availableCategories = useMemo(() => {
-    const cats = projects
-      .map((p) => p.category)
-      .filter((c): c is string => typeof c === 'string' && c.length > 0);
+    const cats = projects.map((p) => p.category).filter((c): c is string => !!c);
     return Array.from(new Set(cats));
   }, [projects]);
 
+  /* ==================== Retire Handler ==================== */
   const handleRetire = (params: RetireParams) => {
-    const currentProject =
-      project ??
-      projects.find((p) => normalizeProjectKey(p.key) === normalizeProjectKey(params.id)) ??
-      null;
+    const currentProject = project ?? projects.find((p) => p.key === params.id) ?? null;
 
     if (typeof window !== 'undefined' && currentProject) {
       localStorage.setItem('project', JSON.stringify(currentProject));
-      localStorage.setItem('selectedVintage', params.selectedVintage || '0');
+      localStorage.setItem('selectedVintage', params.selectedVintage ?? '0');
       localStorage.setItem('quantity', String(params.quantity));
     }
 
-    const sp = new URLSearchParams();
-    sp.set('index', String(params.index));
-    sp.set('selectedVintage', params.selectedVintage || '0');
-    sp.set('quantity', String(params.quantity));
-    sp.set('price', params.priceParam);
-
-    const firstMethName = currentProject?.methodologies?.[0]?.name ?? 'Sin metodología';
-    sp.set('methodologyName', firstMethName);
+    const sp = new URLSearchParams({
+      index: String(params.index),
+      selectedVintage: params.selectedVintage ?? '0',
+      quantity: String(params.quantity),
+      price: params.priceParam,
+      methodologyName: currentProject?.methodologies?.[0]?.name ?? 'Sin metodología',
+    });
 
     router.push(`/retireCheckout?${sp.toString()}`);
   };
@@ -214,9 +186,7 @@ const useMarketplace = (_id?: string): UseMarketplace => {
     projects,
     setProjects,
     project,
-
     handleRetire,
-
     prices,
     isPricesLoading,
   };
