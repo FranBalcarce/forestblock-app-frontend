@@ -1,65 +1,78 @@
 'use client';
 
-import Image from 'next/image';
-import useMarketplace from '@/hooks/useMarketplace';
-import ListingItem from '../ListingCard/ListingItem';
-import LoaderScreenDynamic from '../LoaderScreen/LoaderScreenDynamic';
+import React from 'react';
+import { useSearchParams } from 'next/navigation';
 
-interface Props {
+import ProjectInfo from '@/components/ProjectInfo/ProjectInfo';
+import useMarketplace from '@/hooks/useMarketplace';
+import LoaderScreenDynamic from '@/components/LoaderScreen/LoaderScreenDynamic';
+import type { Price } from '@/types/marketplace';
+
+type Props = {
   id: string;
-}
+};
+
+const getProjectKeyFromPrice = (p: Price): string | undefined =>
+  p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
 
 export default function MarketplaceByIdClient({ id }: Props) {
-  const { project, prices, isPricesLoading, loading, handleRetire } = useMarketplace(id);
+  const searchParams = useSearchParams();
+  const priceParam = searchParams.get('price');
 
-  if (loading || isPricesLoading) return <LoaderScreenDynamic />;
+  // 👉 todos los hooks arriba, sin condicionales
+  const { project, handleRetire, prices, isPricesLoading, loading } = useMarketplace(id);
 
-  if (!project) return <p className="text-center mt-10 text-gray-500">Proyecto no encontrado</p>;
+  // ⏳ estado cargando
+  if (loading && !project) {
+    return <LoaderScreenDynamic />;
+  }
 
-  const matches = prices.filter(
-    (p) => (p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId) === project.key
-  );
+  // ❌ proyecto no encontrado (esto es lo mismo que veías antes)
+  if (!project) {
+    const normalized = id.replace(/^VCS-/, '');
+    return (
+      <div className="flex flex-1 items-center justify-center min-h-[400px] p-4">
+        <div className="text-center max-w-xl">
+          <h1 className="text-xl font-semibold mb-2">Proyecto no encontrado</h1>
+          <p className="text-gray-600 text-sm">
+            ID recibido: <strong>{id}</strong> — Normalizado: <strong>{normalized}</strong>
+          </p>
+          <p className="text-gray-500 text-sm mt-2">
+            Probá volver al marketplace o revisá que el ID coincida con el que devuelve la API.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-  const displayPrice = project.displayPrice ?? '0';
-  const selectedVintage = project.selectedVintage ?? '0';
+  // 🎯 matchear precios del proyecto actual
+  const matches = prices?.filter((p) => getProjectKeyFromPrice(p) === project.key) ?? [];
 
+  const selectedPriceObj = priceParam
+    ? matches.find((p) => String(p.purchasePrice) === String(priceParam))
+    : null;
+
+  const displayPrice = selectedPriceObj
+    ? selectedPriceObj.purchasePrice.toFixed(2)
+    : project.displayPrice ?? project.price ?? '0';
+
+  const selectedVintage =
+    selectedPriceObj?.listing?.creditId?.vintage?.toString() ??
+    selectedPriceObj?.carbonPool?.creditId?.vintage?.toString() ??
+    project.selectedVintage ??
+    '';
+
+  // 👇 acá NO cambiamos el layout: lo decide totalmente ProjectInfo
   return (
-    <div className="w-full flex flex-col items-center gap-10 pb-20">
-      {/* Imagen */}
-      <div className="w-full flex justify-center items-center bg-gray-100 h-[380px] rounded-xl overflow-hidden">
-        {project.images?.[0]?.url ? (
-          <Image
-            src={project.images[0].url}
-            width={800}
-            height={400}
-            alt={project.name}
-            className="object-cover w-full h-full"
-          />
-        ) : (
-          <p className="text-gray-500">Sin imagen</p>
-        )}
-      </div>
-
-      {/* Info */}
-      <div className="max-w-[900px] w-full">
-        <h1 className="text-3xl font-bold">{project.name}</h1>
-        <p className="text-gray-700 mt-2">{project.description}</p>
-      </div>
-
-      {/* Precios */}
-      <div className="max-w-[900px] w-full">
-        <h2 className="text-2xl font-bold mb-4">Precio</h2>
-
-        <ListingItem
-          handleRetire={handleRetire}
-          matches={matches}
-          displayPrice={displayPrice}
-          priceParam={displayPrice}
-          selectedVintage={selectedVintage}
-          isPricesLoading={isPricesLoading}
-        />
-      </div>
-    </div>
+    <ProjectInfo
+      project={project}
+      handleRetire={handleRetire}
+      matches={matches}
+      selectedVintage={selectedVintage}
+      displayPrice={displayPrice}
+      priceParam={priceParam}
+      isPricesLoading={isPricesLoading}
+    />
   );
 }
 
