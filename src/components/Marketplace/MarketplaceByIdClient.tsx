@@ -19,6 +19,12 @@ function getProjectKeyFromPrice(p: Price): string | undefined {
 export default function MarketplaceByIdClient({ id }: Props) {
   const { project, prices, isPricesLoading, handleRetire } = useMarketplace(id);
 
+  // ========================= MATCHES DE PRECIOS (hook SIEMPRE) ====================
+  const matches = useMemo(() => {
+    if (!project) return [];
+    return prices.filter((p) => getProjectKeyFromPrice(p) === project.key);
+  }, [prices, project]);
+
   // Si todavía no tenemos el proyecto, mostramos loading
   if (!project) {
     return (
@@ -35,15 +41,7 @@ export default function MarketplaceByIdClient({ id }: Props) {
   // ========================= VINTAGE POR DEFECTO ===================
   const selectedVintage = project.vintages?.[0] ?? '0';
 
-  // ========================= MATCHES DE PRECIOS ====================
-  const matches = useMemo(
-    () => prices.filter((p) => getProjectKeyFromPrice(p) === project.key),
-    [prices, project.key]
-  );
-
   // ========================= PRECIO BASE ===========================
-  // Tomamos el menor precio disponible de los matches,
-  // y si no hay, usamos el displayPrice del proyecto o price plano.
   const basePriceNumber: number = (() => {
     if (matches.length > 0) {
       const first = matches[0];
@@ -52,7 +50,6 @@ export default function MarketplaceByIdClient({ id }: Props) {
     }
 
     const parsed = Number(project.displayPrice ?? project.price ?? '0');
-
     return Number.isFinite(parsed) ? parsed : 0;
   })();
 
