@@ -1,94 +1,78 @@
 'use client';
 
-import { useMemo } from 'react';
-import Image from 'next/image';
+import React from 'react';
+import { useSearchParams } from 'next/navigation';
 
+import ProjectInfo from '@/components/ProjectInfo/ProjectInfo';
 import useMarketplace from '@/hooks/useMarketplace';
-import ListingItem from '../ListingCard/ListingItem';
+import LoaderScreenDynamic from '@/components/LoaderScreen/LoaderScreenDynamic';
 import type { Price } from '@/types/marketplace';
 
-interface Props {
+type Props = {
   id: string;
-}
+};
 
-// Helper local para matchear precios por proyecto
-function getProjectKeyFromPrice(p: Price): string | undefined {
-  return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
-}
+const getProjectKeyFromPrice = (p: Price): string | undefined =>
+  p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
 
 export default function MarketplaceByIdClient({ id }: Props) {
-  const { project, prices, isPricesLoading, handleRetire } = useMarketplace(id);
+  const searchParams = useSearchParams();
+  const priceParam = searchParams.get('price');
 
-  // ========================= MATCHES DE PRECIOS (hook SIEMPRE) ====================
-  const matches = useMemo(() => {
-    if (!project) return [];
-    return prices.filter((p) => getProjectKeyFromPrice(p) === project.key);
-  }, [prices, project]);
+  // 👉 todos los hooks arriba, sin condicionales
+  const { project, handleRetire, prices, isPricesLoading, loading } = useMarketplace(id);
 
-  // Si todavía no tenemos el proyecto, mostramos loading
+  // ⏳ estado cargando
+  if (loading && !project) {
+    return <LoaderScreenDynamic />;
+  }
+
+  // ❌ proyecto no encontrado (esto es lo mismo que veías antes)
   if (!project) {
+    const normalized = id.replace(/^VCS-/, '');
     return (
-      <div className="flex justify-center items-center py-20">
-        <p>Cargando proyecto...</p>
+      <div className="flex flex-1 items-center justify-center min-h-[400px] p-4">
+        <div className="text-center max-w-xl">
+          <h1 className="text-xl font-semibold mb-2">Proyecto no encontrado</h1>
+          <p className="text-gray-600 text-sm">
+            ID recibido: <strong>{id}</strong> — Normalizado: <strong>{normalized}</strong>
+          </p>
+          <p className="text-gray-500 text-sm mt-2">
+            Probá volver al marketplace o revisá que el ID coincida con el que devuelve la API.
+          </p>
+        </div>
       </div>
     );
   }
 
-  // ========================= IMAGEN SEGURA =========================
-  const rawImage = project.images?.[0];
-  const imageSrc = typeof rawImage === 'string' ? rawImage : rawImage?.url || '/placeholder.png'; // tu tipo Image solo tiene url / caption
+  // 🎯 matchear precios del proyecto actual
+  const matches = prices?.filter((p) => getProjectKeyFromPrice(p) === project.key) ?? [];
 
-  // ========================= VINTAGE POR DEFECTO ===================
-  const selectedVintage = project.vintages?.[0] ?? '0';
+  const selectedPriceObj = priceParam
+    ? matches.find((p) => String(p.purchasePrice) === String(priceParam))
+    : null;
 
-  // ========================= PRECIO BASE ===========================
-  const basePriceNumber: number = (() => {
-    if (matches.length > 0) {
-      const first = matches[0];
-      const val = first.purchasePrice ?? first.baseUnitPrice;
-      if (typeof val === 'number' && Number.isFinite(val)) return val;
-    }
+  const displayPrice = selectedPriceObj
+    ? selectedPriceObj.purchasePrice.toFixed(2)
+    : project.displayPrice ?? project.price ?? '0';
 
-    const parsed = Number(project.displayPrice ?? project.price ?? '0');
-    return Number.isFinite(parsed) ? parsed : 0;
-  })();
+  const selectedVintage =
+    selectedPriceObj?.listing?.creditId?.vintage?.toString() ??
+    selectedPriceObj?.carbonPool?.creditId?.vintage?.toString() ??
+    project.selectedVintage ??
+    '';
 
-  // ========================= +15% MÁRGEN ===========================
-  const finalPriceNumber = basePriceNumber * 1.15; // +15%
-  const displayPrice = finalPriceNumber.toFixed(2);
-  const priceParam = displayPrice; // lo mandamos así al checkout
-
+  // 👇 acá NO cambiamos el layout: lo decide totalmente ProjectInfo
   return (
-    <div className="flex flex-col gap-10 p-5 overflow-hidden md:overflow-visible min-h-screen">
-      {/* ============================== IMAGEN ============================== */}
-      <div className="flex-1">
-        <Image
-          src={imageSrc}
-          width={900}
-          height={500}
-          alt={project.name}
-          className="object-cover rounded-xl w-full h-[380px]"
-        />
-      </div>
-
-      {/* ============================== INFO PROYECTO ======================= */}
-      <div>
-        <h1 className="text-3xl font-bold">{project.name}</h1>
-        <p className="text-gray-700 max-w-[900px] mt-3 leading-relaxed">{project.description}</p>
-      </div>
-
-      {/* ============================== PRECIOS / RETIRO ==================== */}
-      <div className="mt-6">
-        <ListingItem
-          handleRetire={handleRetire}
-          matches={matches}
-          displayPrice={displayPrice}
-          selectedVintage={selectedVintage}
-          priceParam={priceParam}
-          isPricesLoading={isPricesLoading}
-        />
-      </div>
-    </div>
+    <ProjectInfo
+      project={project}
+      handleRetire={handleRetire}
+      matches={matches}
+      selectedVintage={selectedVintage}
+      displayPrice={displayPrice}
+      priceParam={priceParam}
+      isPricesLoading={isPricesLoading}
+    />
   );
 }
 
