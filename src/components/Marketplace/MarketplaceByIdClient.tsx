@@ -1,98 +1,96 @@
 'use client';
 
-import React, { useMemo } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useMemo } from 'react';
+import Image from 'next/image';
 
-import ProjectInfo from '@/components/ProjectInfo/ProjectInfo';
 import useMarketplace from '@/hooks/useMarketplace';
-import LoaderScreenDynamic from '@/components/LoaderScreen/LoaderScreenDynamic';
+import ListingItem from '../ListingCard/ListingItem';
 import type { Price } from '@/types/marketplace';
 
-// 🔹 mismo markup del 15%
-const MARKUP = 1.15;
-
-type Props = {
+interface Props {
   id: string;
-};
+}
 
-const getProjectIdFromPrice = (p: Price): string | undefined => {
+// Helper local para matchear precios por proyecto
+function getProjectKeyFromPrice(p: Price): string | undefined {
   return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
-};
+}
 
 export default function MarketplaceByIdClient({ id }: Props) {
-  const searchParams = useSearchParams();
-  const priceParam = searchParams.get('price'); // este viene en precio base (Carbonmark)
+  const { project, prices, isPricesLoading, handleRetire } = useMarketplace(id);
 
-  const { project, handleRetire, prices, isPricesLoading, loading } = useMarketplace(id);
-
-  // Mientras carga projects o no hay project, mostramos loader
-  if (loading || !project) {
-    return <LoaderScreenDynamic />;
+  // Si todavía no tenemos el proyecto, mostramos loading
+  if (!project) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <p>Cargando proyecto...</p>
+      </div>
+    );
   }
 
-  // Filtramos los prices que pertenecen al proyecto
-  const matches: Price[] = useMemo(() => {
-    return prices.filter((p) => getProjectIdFromPrice(p) === project.key);
-  }, [prices, project.key]);
+  // ========================= IMAGEN SEGURA =========================
+  const rawImage = project.images?.[0];
+  const imageSrc = typeof rawImage === 'string' ? rawImage : rawImage?.url || '/placeholder.png'; // tu tipo Image solo tiene url / caption
 
-  // Elegimos un price según el query param (base) si existe
-  const selectedPriceObj: Price | null = useMemo(() => {
-    if (!priceParam) return null;
-    return matches.find((p) => String(p.purchasePrice) === String(priceParam)) ?? null;
-  }, [matches, priceParam]);
+  // ========================= VINTAGE POR DEFECTO ===================
+  const selectedVintage = project.vintages?.[0] ?? '0';
 
-  // Calculamos el precio a mostrar CON el 15%
-  const displayPrice: string = useMemo(() => {
-    const convert = (base: number) => (base * MARKUP).toFixed(2);
+  // ========================= MATCHES DE PRECIOS ====================
+  const matches = useMemo(
+    () => prices.filter((p) => getProjectKeyFromPrice(p) === project.key),
+    [prices, project.key]
+  );
 
-    // 1) Si viene price (base) por query => lo usamos
-    if (priceParam && !Number.isNaN(Number(priceParam))) {
-      return convert(Number(priceParam));
+  // ========================= PRECIO BASE ===========================
+  // Tomamos el menor precio disponible de los matches,
+  // y si no hay, usamos el displayPrice del proyecto o price plano.
+  const basePriceNumber: number = (() => {
+    if (matches.length > 0) {
+      const first = matches[0];
+      const val = first.purchasePrice ?? first.baseUnitPrice;
+      if (typeof val === 'number' && Number.isFinite(val)) return val;
     }
 
-    // 2) Si tenemos matches => usamos el menor purchasePrice
-    if (matches.length) {
-      const bases = matches
-        .map((m) => m.purchasePrice)
-        .filter((n): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0);
+    const parsed = Number(project.displayPrice ?? project.price ?? '0');
 
-      if (bases.length) {
-        const minBase = Math.min(...bases);
-        return convert(minBase);
-      }
-    }
+    return Number.isFinite(parsed) ? parsed : 0;
+  })();
 
-    // 3) Fallback: si el project ya tiene displayPrice (que ya incluye markup),
-    // lo usamos tal cual para no volver a multiplicar
-    if (project.displayPrice) return project.displayPrice;
-
-    return '0.00';
-  }, [matches, priceParam, project.displayPrice]);
-
-  // Vintage seleccionado
-  const selectedVintage: string = useMemo(() => {
-    if (selectedPriceObj) {
-      const v1 = selectedPriceObj.listing?.creditId?.vintage;
-      const v2 = selectedPriceObj.carbonPool?.creditId?.vintage;
-      if (v1 != null) return String(v1);
-      if (v2 != null) return String(v2);
-    }
-
-    // fallback: el que traiga el project
-    return project.selectedVintage ?? '';
-  }, [project.selectedVintage, selectedPriceObj]);
+  // ========================= +15% MÁRGEN ===========================
+  const finalPriceNumber = basePriceNumber * 1.15; // +15%
+  const displayPrice = finalPriceNumber.toFixed(2);
+  const priceParam = displayPrice; // lo mandamos así al checkout
 
   return (
-    <div className="flex gap-10 p-5 overflow-hidden md:overflow-visible min-h-screen">
-      <ProjectInfo
-        project={project}
-        handleRetire={handleRetire}
-        matches={matches}
-        selectedVintage={selectedVintage}
-        displayPrice={displayPrice}
-        priceParam={priceParam || null} // <<---- FIX
-        isPricesLoading={isPricesLoading}
-      />
+    <div className="flex flex-col gap-10 p-5 overflow-hidden md:overflow-visible min-h-screen">
+      {/* ============================== IMAGEN ============================== */}
+      <div className="flex-1">
+        <Image
+          src={imageSrc}
+          width={900}
+          height={500}
+          alt={project.name}
+          className="object-cover rounded-xl w-full h-[380px]"
+        />
+      </div>
+
+      {/* ============================== INFO PROYECTO ======================= */}
+      <div>
+        <h1 className="text-3xl font-bold">{project.name}</h1>
+        <p className="text-gray-700 max-w-[900px] mt-3 leading-relaxed">{project.description}</p>
+      </div>
+
+      {/* ============================== PRECIOS / RETIRO ==================== */}
+      <div className="mt-6">
+        <ListingItem
+          handleRetire={handleRetire}
+          matches={matches}
+          displayPrice={displayPrice}
+          selectedVintage={selectedVintage}
+          priceParam={priceParam}
+          isPricesLoading={isPricesLoading}
+        />
+      </div>
     </div>
   );
 }
