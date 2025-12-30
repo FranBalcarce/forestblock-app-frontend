@@ -3,15 +3,17 @@ import { useRouter } from 'next/navigation';
 
 import type { Project } from '@/types/project';
 import type { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
+
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
-/* ======================= ENDPOINTS ======================= */
 const ENDPOINTS = {
   projects: '/api/carbon/carbonProjects',
   prices: '/api/carbon/prices',
 };
 
-/* ======================= HELPERS ======================= */
+// 🔹 markup del 15%
+const MARKUP = 1.15;
+
 type UnknownRecord = Record<string, unknown>;
 const isRecord = (v: unknown): v is UnknownRecord => typeof v === 'object' && v !== null;
 
@@ -22,6 +24,11 @@ function unwrapArray<T>(payload: unknown): T[] {
   return [];
 }
 
+/**
+ * Matchea prices por project key:
+ * price.listing.creditId.projectId === "VCS-844"
+ * o price.carbonPool.creditId.projectId === "VCS-844"
+ */
 function getProjectKeyFromPrice(p: Price): string | undefined {
   return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
 }
@@ -42,16 +49,20 @@ function computeMinPriceForProject(projectKey: string, prices: Price[]): number 
 function normalizeProject(p: Project, prices: Price[]): Project {
   const minPrice = computeMinPriceForProject(p.key, prices);
 
+  // ⚠️ OJO: acá el displayPrice ya queda con el 15% aplicado
   return {
     ...p,
     images: p.images ?? [],
     description: p.short_description || p.description || 'No description available',
-    displayPrice: minPrice !== null ? minPrice.toFixed(2) : String(p.price ?? '0'),
+    displayPrice:
+      minPrice !== null
+        ? (minPrice * MARKUP).toFixed(2)
+        : p.price
+        ? (Number(p.price) * MARKUP).toFixed(2)
+        : '0',
     selectedVintage: p.vintages?.[0],
   };
 }
-
-/* ======================= MAIN HOOK ======================= */
 
 const useMarketplace = (id?: string): UseMarketplace => {
   const router = useRouter();
@@ -60,8 +71,8 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [project, setProject] = useState<Project | null>(null);
 
   const [prices, setPrices] = useState<Price[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isPricesLoading, setIsPricesLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [isPricesLoading, setIsPricesLoading] = useState<boolean>(true);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('price_asc');
@@ -70,7 +81,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
-  /* ==================== 1) Load Prices ==================== */
+  // 1) precios
   useEffect(() => {
     const fetchPrices = async () => {
       try {
@@ -78,16 +89,17 @@ const useMarketplace = (id?: string): UseMarketplace => {
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices);
         setPrices(unwrapArray<Price>(res.data));
       } catch (err) {
-        console.error('❌ Error fetching prices', err);
+        console.error('Error fetching prices', err);
         setPrices([]);
       } finally {
         setIsPricesLoading(false);
       }
     };
+
     fetchPrices();
   }, []);
 
-  /* ==================== 2) Load Projects ==================== */
+  // 2) projects (lista + si hay id, el project puntual)
   useEffect(() => {
     const fetchProjects = async () => {
       try {
@@ -96,19 +108,25 @@ const useMarketplace = (id?: string): UseMarketplace => {
         const list = unwrapArray<Project>(res.data).map((p) => normalizeProject(p, prices));
 
         setProjects(list);
-        if (id) setProject(list.find((p) => p.key === id) ?? null);
+
+        if (id) {
+          const found = list.find((p) => p.key === id);
+          setProject(found ?? null);
+        } else {
+          setProject(null);
+        }
       } catch (err) {
-        console.error('❌ Error fetching projects', err);
+        console.error('Error fetching projects', err);
         setProjects([]);
         if (id) setProject(null);
       } finally {
         setLoading(false);
       }
     };
+
     fetchProjects();
   }, [id, prices]);
 
-  /* ==================== Filtering & Sorting ==================== */
   const filteredProjects = useMemo(() => {
     let list = [...projects];
 
@@ -130,37 +148,43 @@ const useMarketplace = (id?: string): UseMarketplace => {
     }
 
     if (sortBy === 'price_asc') {
-      list.sort((a, b) => Number(a.displayPrice) - Number(b.displayPrice));
+      list.sort((a, b) => Number(a.displayPrice ?? 0) - Number(b.displayPrice ?? 0));
     }
     if (sortBy === 'price_desc') {
-      list.sort((a, b) => Number(b.displayPrice) - Number(a.displayPrice));
+      list.sort((a, b) => Number(b.displayPrice ?? 0) - Number(a.displayPrice ?? 0));
     }
 
     return list;
   }, [projects, searchTerm, selectedCountries, selectedCategories, selectedVintages, sortBy]);
 
   const availableCategories = useMemo(() => {
-    const cats = projects.map((p) => p.category).filter((c): c is string => !!c);
+    const cats = projects
+      .map((p) => p.category)
+      .filter((c): c is string => typeof c === 'string' && c.length > 0);
     return Array.from(new Set(cats));
   }, [projects]);
 
-  /* ==================== Retire Handler ==================== */
   const handleRetire = (params: RetireParams) => {
+    // Buscamos el project (por si venimos de la lista)
     const currentProject = project ?? projects.find((p) => p.key === params.id) ?? null;
 
     if (typeof window !== 'undefined' && currentProject) {
       localStorage.setItem('project', JSON.stringify(currentProject));
-      localStorage.setItem('selectedVintage', params.selectedVintage ?? '0');
+      localStorage.setItem('selectedVintage', params.selectedVintage || '0');
       localStorage.setItem('quantity', String(params.quantity));
     }
 
-    const sp = new URLSearchParams({
-      index: String(params.index),
-      selectedVintage: params.selectedVintage ?? '0',
-      quantity: String(params.quantity),
-      price: params.priceParam,
-      methodologyName: currentProject?.methodologies?.[0]?.name ?? 'Sin metodología',
-    });
+    const sp = new URLSearchParams();
+    sp.set('index', String(params.index));
+    sp.set('selectedVintage', params.selectedVintage || '0');
+    sp.set('quantity', String(params.quantity));
+
+    // 🔹 acá aplicamos el 15% al precio que va al checkout
+    const finalPrice = (Number(params.priceParam) * MARKUP).toFixed(2);
+    sp.set('price', finalPrice);
+
+    const firstMethName = currentProject?.methodologies?.[0]?.name ?? 'Sin metodología';
+    sp.set('methodologyName', firstMethName);
 
     router.push(`/retireCheckout?${sp.toString()}`);
   };
@@ -186,7 +210,9 @@ const useMarketplace = (id?: string): UseMarketplace => {
     projects,
     setProjects,
     project,
+
     handleRetire,
+
     prices,
     isPricesLoading,
   };
