@@ -3,19 +3,10 @@ import { NextResponse } from 'next/server';
 export async function GET() {
   try {
     const apiUrl = process.env.CARBONMARK_API_URL || 'https://api.carbonmark.com';
-    const apiKey = process.env.CARBONMARK_API_KEY;
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key not configured' },
-        { status: 500 }
-      );
-    }
-
-    const response = await fetch(`${apiUrl}/v0/projects`, {
+    
+    const response = await fetch(`${apiUrl}/carbonProjects`, {
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
     });
 
