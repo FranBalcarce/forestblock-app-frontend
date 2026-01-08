@@ -1,4 +1,3 @@
-// src/components/ListingCard/ListingItem.tsx
 import { useEffect, useState } from 'react';
 import ListingDetail from './ListingDetail';
 import { useRetire } from '@/context/RetireContext';
@@ -10,12 +9,14 @@ import { formatNumber } from '@/utils/formatNumber';
 import ListingItemSkeleton from './ListingItemSkeleton';
 import type { RetireParams } from '@/types/marketplace';
 
+const MARKUP = 1.15;
+
 const ListingItem = ({
   handleRetire,
   matches,
   selectedVintage,
-  displayPrice,
-  priceParam,
+  displayPrice, // viene ya con 15% (UI)
+  priceParam, // viene RAW (query ?price=)
   isPricesLoading,
 }: ListingProps) => {
   const {
@@ -39,8 +40,8 @@ const ListingItem = ({
           ? match.listing?.creditId?.vintage?.toString()
           : match.carbonPool?.creditId?.vintage?.toString();
 
-        const matchPrice = match.purchasePrice?.toFixed(2);
-        return matchVintage === selectedVintage && matchPrice === displayPrice;
+        const matchPriceRaw = match.purchasePrice?.toFixed(2);
+        return matchVintage === selectedVintage && matchPriceRaw === (priceParam ?? '');
       });
 
       if (computedIndex === -1) {
@@ -57,16 +58,33 @@ const ListingItem = ({
       setDefaultIndex(computedIndex);
       setLocalIndex(computedIndex);
       setIndex(computedIndex);
+
+      setTotalSupply(matches[computedIndex]?.supply ?? 0);
     }
-  }, [defaultIndex, matches, selectedVintage, displayPrice, setIndex]);
+  }, [defaultIndex, matches, selectedVintage, priceParam, setIndex, setTotalSupply]);
+
+  if (isPricesLoading) return <ListingItemSkeleton />;
+
+  // ✅ si no hay matches, no se puede retirar
+  if (!matches || matches.length === 0) {
+    return (
+      <div className="p-6 rounded-xl border border-gray-200">
+        <p className="text-gray-600">
+          No hay precios disponibles para este proyecto en este momento.
+        </p>
+      </div>
+    );
+  }
 
   const effectiveIndex = localIndex;
   const selectedMatch = matches[effectiveIndex] || matches[0];
 
-  const price = selectedMatch?.purchasePrice ?? Number(displayPrice ?? 0);
+  const priceRaw = selectedMatch?.purchasePrice ?? 0; // ✅ RAW
+  const priceFinal = Number.isFinite(priceRaw) ? priceRaw * MARKUP : 0; // ✅ con 15%
+
   const availableTonnes = selectedMatch?.supply ?? 0;
 
-  const total = Number(price) * Number(tonnesToRetire);
+  const total = Number(priceFinal) * Number(tonnesToRetire);
   const value = formatNumber(total);
 
   const formattedSupply =
@@ -84,28 +102,26 @@ const ListingItem = ({
       ? String(selectedMatch.carbonPool.creditId.vintage)
       : selectedVintage ?? '';
 
-  // ✅ (2) guardamos price con 2 decimales para consistencia
-  const effectivePriceParam =
-    priceParam ?? (Number.isFinite(price) ? Number(price).toFixed(2) : '');
-
   const projectId =
     selectedMatch?.listing?.creditId?.projectId ??
     selectedMatch?.carbonPool?.creditId?.projectId ??
     '';
+
+  // ✅ priceParam para retirar SIEMPRE RAW
+  const effectivePriceParam = Number.isFinite(priceRaw) ? Number(priceRaw).toFixed(2) : '';
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newIndex = Number(e.target.value);
     setLocalIndex(newIndex);
     setIndex(newIndex);
 
-    // ✅ (1) evitar price=undefined
-    const newPrice = matches[newIndex]?.purchasePrice;
-    if (newPrice == null) return;
+    const newPriceRaw = matches[newIndex]?.purchasePrice;
+    if (newPriceRaw == null) return;
 
     setTotalSupply(matches[newIndex]?.supply ?? 0);
 
     router.replace(
-      `?price=${newPrice.toFixed(2)}&vintages=${matches
+      `?price=${newPriceRaw.toFixed(2)}&vintages=${matches
         .map((match) =>
           match.listing
             ? match.listing?.creditId?.vintage?.toString()
@@ -115,8 +131,6 @@ const ListingItem = ({
         .join(',')}`
     );
   };
-
-  if (isPricesLoading) return <ListingItemSkeleton />;
 
   const isDisabled =
     !projectId ||
@@ -128,13 +142,12 @@ const ListingItem = ({
   const retireParams: RetireParams = {
     id: projectId,
     index: effectiveIndex,
-    priceParam: effectivePriceParam,
+    priceParam: effectivePriceParam, // ✅ RAW
     selectedVintage: selectedMatchVintage,
-    quantity: tonnesToRetire, // ✅ obligatorio
+    quantity: tonnesToRetire,
   };
 
   return (
-    // ✅ (3) key no hace falta si no estás en un .map()
     <div className="relative pb-6 mb-8 last:mb-0 flex flex-col gap-5 h-auto">
       <ListingDetail
         label="Año"
@@ -161,7 +174,8 @@ const ListingItem = ({
         value={
           <span>
             <span className="text-forestGreen font-bold font-neueMontreal text-[23px]">
-              ${Number.isFinite(price) ? Number(price).toFixed(2) : '0.00'}
+              $
+              {Number.isFinite(priceFinal) ? Number(priceFinal).toFixed(2) : displayPrice ?? '0.00'}
             </span>{' '}
             <span className="text-customGray text-[23px] font-neueMontreal">/tCO2e</span>
           </span>

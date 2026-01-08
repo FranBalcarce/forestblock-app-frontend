@@ -11,7 +11,7 @@ const ENDPOINTS = {
   prices: '/api/carbon/prices',
 };
 
-// 🔹 markup del 15%
+// ✅ markup del 15% (se aplica SOLO para mostrar y para el checkout final)
 const MARKUP = 1.15;
 
 type UnknownRecord = Record<string, unknown>;
@@ -27,13 +27,13 @@ function unwrapArray<T>(payload: unknown): T[] {
 /**
  * Matchea prices por project key:
  * price.listing.creditId.projectId === "VCS-844"
- * o price.carbonPool.creditId.projectId === "VCS-844"
+ * o price.carbonPool.creditId.projectId === "VCS-844" (legacy)
  */
 function getProjectKeyFromPrice(p: Price): string | undefined {
   return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
 }
 
-function computeMinPriceForProject(projectKey: string, prices: Price[]): number | null {
+function computeMinRawPriceForProject(projectKey: string, prices: Price[]): number | null {
   const filtered = prices.filter((p) => getProjectKeyFromPrice(p) === projectKey);
   if (!filtered.length) return null;
 
@@ -46,20 +46,23 @@ function computeMinPriceForProject(projectKey: string, prices: Price[]): number 
   return min;
 }
 
+/**
+ * ✅ IMPORTANTE:
+ * Guardamos displayPrice como RAW (sin 15%).
+ * El 15% se aplica en el componente (UI) y en el checkout final.
+ */
 function normalizeProject(p: Project, prices: Price[]): Project {
-  const minPrice = computeMinPriceForProject(p.key, prices);
+  const minRawPrice = computeMinRawPriceForProject(p.key, prices);
 
-  // ⚠️ OJO: acá el displayPrice ya queda con el 15% aplicado
+  const fallbackRaw = p.price != null && Number.isFinite(Number(p.price)) ? Number(p.price) : 0;
+
+  const raw = minRawPrice ?? fallbackRaw;
+
   return {
     ...p,
     images: p.images ?? [],
     description: p.short_description || p.description || 'No description available',
-    displayPrice:
-      minPrice !== null
-        ? (minPrice * MARKUP).toFixed(2)
-        : p.price
-        ? (Number(p.price) * MARKUP).toFixed(2)
-        : '0',
+    displayPrice: raw.toFixed(2), // ✅ RAW
     selectedVintage: p.vintages?.[0],
   };
 }
@@ -105,8 +108,8 @@ const useMarketplace = (id?: string): UseMarketplace => {
       try {
         setLoading(true);
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
-        const list = unwrapArray<Project>(res.data).map((p) => normalizeProject(p, prices));
 
+        const list = unwrapArray<Project>(res.data).map((p) => normalizeProject(p, prices));
         setProjects(list);
 
         if (id) {
@@ -147,6 +150,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
       list = list.filter((p) => p.vintages?.some((v) => selectedVintages.includes(v)));
     }
 
+    // sorting por RAW
     if (sortBy === 'price_asc') {
       list.sort((a, b) => Number(a.displayPrice ?? 0) - Number(b.displayPrice ?? 0));
     }
@@ -165,7 +169,6 @@ const useMarketplace = (id?: string): UseMarketplace => {
   }, [projects]);
 
   const handleRetire = (params: RetireParams) => {
-    // Buscamos el project (por si venimos de la lista)
     const currentProject = project ?? projects.find((p) => p.key === params.id) ?? null;
 
     if (typeof window !== 'undefined' && currentProject) {
@@ -179,8 +182,9 @@ const useMarketplace = (id?: string): UseMarketplace => {
     sp.set('selectedVintage', params.selectedVintage || '0');
     sp.set('quantity', String(params.quantity));
 
-    // 🔹 acá aplicamos el 15% al precio que va al checkout
-    const finalPrice = (Number(params.priceParam) * MARKUP).toFixed(2);
+    // ✅ params.priceParam es RAW (sin markup)
+    const raw = Number(params.priceParam);
+    const finalPrice = Number.isFinite(raw) ? (raw * MARKUP).toFixed(2) : '0.00';
     sp.set('price', finalPrice);
 
     const firstMethName = currentProject?.methodologies?.[0]?.name ?? 'Sin metodología';

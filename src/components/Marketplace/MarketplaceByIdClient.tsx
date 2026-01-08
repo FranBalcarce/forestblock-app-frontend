@@ -12,22 +12,23 @@ type Props = {
   id: string;
 };
 
+// ✅ markup del 15% (solo para UI / checkout final)
+const MARKUP = 1.15;
+
 const getProjectKeyFromPrice = (p: Price): string | undefined =>
   p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
 
 export default function MarketplaceByIdClient({ id }: Props) {
   const searchParams = useSearchParams();
-  const priceParam = searchParams.get('price');
+  const priceParamRaw = searchParams.get('price'); // ✅ SIEMPRE RAW (sin 15%)
 
-  // 👉 todos los hooks arriba, sin condicionales
+  // ✅ hooks arriba, sin condicionales
   const { project, handleRetire, prices, isPricesLoading, loading } = useMarketplace(id);
 
-  // ⏳ estado cargando
   if (loading && !project) {
     return <LoaderScreenDynamic />;
   }
 
-  // ❌ proyecto no encontrado (esto es lo mismo que veías antes)
   if (!project) {
     const normalized = id.replace(/^VCS-/, '');
     return (
@@ -45,16 +46,22 @@ export default function MarketplaceByIdClient({ id }: Props) {
     );
   }
 
-  // 🎯 matchear precios del proyecto actual
+  // ✅ precios del proyecto actual
   const matches = prices?.filter((p) => getProjectKeyFromPrice(p) === project.key) ?? [];
 
-  const selectedPriceObj = priceParam
-    ? matches.find((p) => String(p.purchasePrice) === String(priceParam))
-    : null;
+  // Buscar el precio seleccionado por query param (RAW)
+  const selectedPriceObj =
+    priceParamRaw && matches.length
+      ? matches.find((p) => Number(p.purchasePrice).toFixed(2) === Number(priceParamRaw).toFixed(2))
+      : null;
 
-  const displayPrice = selectedPriceObj
-    ? selectedPriceObj.purchasePrice.toFixed(2)
-    : project.displayPrice ?? project.price ?? '0';
+  // ✅ raw base (sin markup)
+  const rawBase =
+    selectedPriceObj?.purchasePrice ??
+    (Number.isFinite(Number(project.displayPrice)) ? Number(project.displayPrice) : 0);
+
+  // ✅ precio final (con markup) para mostrar
+  const displayPrice = (rawBase * MARKUP).toFixed(2);
 
   const selectedVintage =
     selectedPriceObj?.listing?.creditId?.vintage?.toString() ??
@@ -62,15 +69,14 @@ export default function MarketplaceByIdClient({ id }: Props) {
     project.selectedVintage ??
     '';
 
-  // 👇 acá NO cambiamos el layout: lo decide totalmente ProjectInfo
   return (
     <ProjectInfo
       project={project}
       handleRetire={handleRetire}
       matches={matches}
       selectedVintage={selectedVintage}
-      displayPrice={displayPrice}
-      priceParam={priceParam}
+      displayPrice={displayPrice} // ✅ con 15% para UI
+      priceParam={priceParamRaw} // ✅ RAW para matchear y para retiro
       isPricesLoading={isPricesLoading}
     />
   );
