@@ -139,7 +139,6 @@ const useMarketplace = (id?: string): UseMarketplace => {
     sortBy,
     setSortBy,
     projects,
-    setProjects,
     project,
     handleRetire: () => {},
     prices,
