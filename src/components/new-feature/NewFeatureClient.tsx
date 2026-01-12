@@ -2,17 +2,20 @@
 
 import React, { useMemo, useState } from 'react';
 import type { Project } from '@/types/project';
+import type { SortBy } from '@/types/marketplace'; // ✅ TIPO CORRECTO
+
 import Header from '@/components/new-feature/header';
 import dynamic from 'next/dynamic';
 
 import { DEV_PROJECTS } from '@/data/devProjects';
 import { toMarketplaceProject } from '@/utils/toMarketplaceProject';
 
+// 👇 ProjectList solo en cliente
 const ProjectList = dynamic(() => import('@/components/Marketplace/ProjectList'), { ssr: false });
 
 const NewFeatureClient: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<string>('relevance');
+  const [sortBy, setSortBy] = useState<SortBy>('price_desc'); // ✅ FIX CLAVE
   const [loading] = useState<boolean>(false);
 
   // 🔹 filtros
@@ -25,7 +28,7 @@ const NewFeatureClient: React.FC = () => {
   const [countryFilter, setCountryFilter] = useState<'todos' | string>('todos');
   const [yearFilter, setYearFilter] = useState<'todos' | number>('todos');
 
-  // 🔹 valores únicos (para botones)
+  // 🔹 valores únicos
   const countries = useMemo(() => Array.from(new Set(DEV_PROJECTS.map((p) => p.country))), []);
 
   const years = useMemo(
@@ -45,19 +48,17 @@ const NewFeatureClient: React.FC = () => {
         p.stage.toLowerCase().includes(t);
 
       const matchesFase = faseFilter === 'todas' || p.stage === faseFilter;
-
       const matchesTipo = tipoFilter === 'todos' || p.tipo === tipoFilter;
-
       const matchesCountry = countryFilter === 'todos' || p.country === countryFilter;
-
       const matchesYear = yearFilter === 'todos' || p.year === yearFilter;
 
       return matchesSearch && matchesFase && matchesTipo && matchesCountry && matchesYear;
     });
   }, [searchTerm, faseFilter, tipoFilter, countryFilter, yearFilter]);
 
+  // 🔹 adapto a Project del marketplace
   const filtered: Project[] = useMemo(
-    () => filteredDev.map(toMarketplaceProject) as unknown as Project[],
+    () => filteredDev.map(toMarketplaceProject) as Project[],
     [filteredDev]
   );
 
@@ -129,11 +130,12 @@ const NewFeatureClient: React.FC = () => {
           </FilterSection>
         </aside>
 
+        {/* LISTADO */}
         <ProjectList
           loading={loading}
           projects={filtered}
-          sortBy={sortBy}
-          setSortBy={setSortBy}
+          sortBy={sortBy} // ✅ SortBy
+          setSortBy={setSortBy} // ✅ (value: SortBy) => void
           openFilters={() => {}}
         />
       </div>
