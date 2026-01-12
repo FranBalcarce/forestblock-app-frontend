@@ -71,6 +71,13 @@ export interface UseMarketplace {
     quantity: number;
   }) => void;
 }
+export type RetireParams = {
+  id: string;
+  index: number;
+  priceParam: string;
+  selectedVintage: string;
+  quantity: number;
+};
 
 // import { Project } from './project';
 // export interface Price {
