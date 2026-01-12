@@ -1,23 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import qs from 'qs';
 import type { AxiosError } from 'axios';
 
 import { useRetire } from '@/context/RetireContext';
 import { useAuth } from '@/context/AuthContext';
 
-import { MAX_MONITORING_TIME, POLLING_INTERVAL, PRICE_MULTIPLIER } from '@/constants';
+import { PRICE_MULTIPLIER } from '@/constants';
 
 import type { Price } from '@/types/marketplace';
-import type { PaymentDetails } from '@/types/retirement';
 
 import axiosInstance from '@/utils/axios/axiosInstance';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
 /* ------------------------------------------------------------------ */
-/* helpers seguros (NO any)                                            */
+/* helpers seguros                                                     */
 /* ------------------------------------------------------------------ */
 
 type UnknownRecord = Record<string, unknown>;
@@ -34,7 +33,6 @@ function unwrapArray<T>(payload: unknown): T[] {
 /* ------------------------------------------------------------------ */
 
 export const useRetireCheckout = (index?: string | null) => {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   const projectIds = searchParams.get('projectIds');
@@ -47,11 +45,6 @@ export const useRetireCheckout = (index?: string | null) => {
   const [listing, setListing] = useState<Price | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [formSubmitted, setFormSubmitted] = useState(false);
-  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails | null>(null);
-  const [paymentStatus, setPaymentStatus] = useState('PENDING');
-  const [monitoring, setMonitoring] = useState(false);
-  const [amountReceived, setAmountReceived] = useState(0);
 
   /* ------------------------------------------------------------------ */
   /* FETCH LISTING + PROJECT                                             */
@@ -77,7 +70,7 @@ export const useRetireCheckout = (index?: string | null) => {
         const targetRaw = targetFinal / PRICE_MULTIPLIER;
         const targetVintage = selectedVintage ? Number(selectedVintage) : null;
 
-        const listingFound =
+        const found =
           prices.find((p) => {
             const raw = typeof p.purchasePrice === 'number' ? p.purchasePrice : p.baseUnitPrice;
 
@@ -89,22 +82,20 @@ export const useRetireCheckout = (index?: string | null) => {
             }
 
             return priceMatch;
-          }) ?? (index !== null && index !== undefined ? prices[Number(index)] : null);
+          }) ?? (index ? prices[Number(index)] : null);
 
-        if (!listingFound) {
+        if (!found) {
           setError('No se encontró un listing válido.');
-          setListing(null);
           return;
         }
 
         setListing({
-          ...listingFound,
-          purchasePrice:
-            (listingFound.purchasePrice ?? listingFound.baseUnitPrice) * PRICE_MULTIPLIER,
+          ...found,
+          purchasePrice: (found.purchasePrice ?? found.baseUnitPrice) * PRICE_MULTIPLIER,
         });
       } catch (err) {
-        setError('Failed to load listing data.');
         console.error(err);
+        setError('Failed to load listing data.');
       } finally {
         setLoading(false);
       }
@@ -118,13 +109,12 @@ export const useRetireCheckout = (index?: string | null) => {
           `/carbon/carbonProjects/${projectIds}`
         );
 
-        if (!isRecord(response)) return;
+        if (!isRecord(response) || !isRecord(response.data)) return;
 
-        const data = response.data;
-        if (!isRecord(data)) return;
-
-        setTotalSupply(isRecord(data.stats) ? (data.stats.totalSupply as number) : 0);
-        setProject(data);
+        setProject(response.data);
+        setTotalSupply(
+          isRecord(response.data.stats) ? (response.data.stats.totalSupply as number) : 0
+        );
       } catch (err) {
         console.error('Error fetching project', err);
       }
@@ -134,8 +124,6 @@ export const useRetireCheckout = (index?: string | null) => {
     fetchListing();
   }, [projectIds, index, priceParam, selectedVintage, setProject, setTotalSupply]);
 
-  /* ------------------------------------------------------------------ */
-  /* PAYMENTS                                                           */
   /* ------------------------------------------------------------------ */
 
   const calculateTotalCost = () => (listing ? tonnesToRetire * listing.purchasePrice : 0);
@@ -170,20 +158,14 @@ export const useRetireCheckout = (index?: string | null) => {
     }
   };
 
-  /* ------------------------------------------------------------------ */
-
   return {
     listing,
     tonnesToRetire,
     setTonnesToRetire,
     loading,
     error,
-    handleStripeCheckout,
-    formSubmitted,
-    paymentDetails,
-    paymentStatus,
     calculateTotalCost,
-    amountReceived,
+    handleStripeCheckout,
     project,
   };
 };
