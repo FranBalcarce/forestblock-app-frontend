@@ -2,17 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type { Project } from '@/types/project';
-import type { Price, UseMarketplace, RetireParams } from '@/types/marketplace';
+import type { Price, UseMarketplace, RetireParams, SortBy } from '@/types/marketplace';
 
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
+
+/* ================= ENDPOINTS ================= */
 
 const ENDPOINTS = {
   projects: '/api/carbon/carbonProjects',
   prices: '/api/carbon/prices',
 };
 
-// ✅ markup del 15% (se aplica SOLO para mostrar y para el checkout final)
+// markup solo UI + checkout
 const MARKUP = 1.15;
+
+/* ================= HELPERS ================= */
 
 type UnknownRecord = Record<string, unknown>;
 const isRecord = (v: unknown): v is UnknownRecord => typeof v === 'object' && v !== null;
@@ -24,11 +28,6 @@ function unwrapArray<T>(payload: unknown): T[] {
   return [];
 }
 
-/**
- * Matchea prices por project key:
- * price.listing.creditId.projectId === "VCS-844"
- * o price.carbonPool.creditId.projectId === "VCS-844" (legacy)
- */
 function getProjectKeyFromPrice(p: Price): string | undefined {
   return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
 }
@@ -40,32 +39,27 @@ function computeMinRawPriceForProject(projectKey: string, prices: Price[]): numb
   let min: number | null = null;
   for (const pr of filtered) {
     const val = pr.purchasePrice ?? pr.baseUnitPrice;
-    if (typeof val !== 'number' || !Number.isFinite(val)) continue;
+    if (!Number.isFinite(val)) continue;
     if (min === null || val < min) min = val;
   }
   return min;
 }
 
-/**
- * ✅ IMPORTANTE:
- * Guardamos displayPrice como RAW (sin 15%).
- * El 15% se aplica en el componente (UI) y en el checkout final.
- */
 function normalizeProject(p: Project, prices: Price[]): Project {
   const minRawPrice = computeMinRawPriceForProject(p.key, prices);
-
-  const fallbackRaw = p.price != null && Number.isFinite(Number(p.price)) ? Number(p.price) : 0;
-
+  const fallbackRaw = Number.isFinite(Number(p.price)) ? Number(p.price) : 0;
   const raw = minRawPrice ?? fallbackRaw;
 
   return {
     ...p,
     images: p.images ?? [],
     description: p.short_description || p.description || 'No description available',
-    displayPrice: raw.toFixed(2), // ✅ RAW
+    displayPrice: raw.toFixed(2), // 🔴 RAW sin markup
     selectedVintage: p.vintages?.[0],
   };
 }
+
+/* ================= HOOK ================= */
 
 const useMarketplace = (id?: string): UseMarketplace => {
   const router = useRouter();
@@ -74,17 +68,19 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [project, setProject] = useState<Project | null>(null);
 
   const [prices, setPrices] = useState<Price[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [isPricesLoading, setIsPricesLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+  const [isPricesLoading, setIsPricesLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('price_asc');
+  const [sortBy, setSortBy] = useState<SortBy>('price_asc');
+
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
-  // 1) precios
+  /* ================= PRICES ================= */
+
   useEffect(() => {
     const fetchPrices = async () => {
       try {
@@ -98,11 +94,11 @@ const useMarketplace = (id?: string): UseMarketplace => {
         setIsPricesLoading(false);
       }
     };
-
     fetchPrices();
   }, []);
 
-  // 2) projects (lista + si hay id, el project puntual)
+  /* ================= PROJECTS ================= */
+
   useEffect(() => {
     const fetchProjects = async () => {
       try {
@@ -110,18 +106,18 @@ const useMarketplace = (id?: string): UseMarketplace => {
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
 
         const list = unwrapArray<Project>(res.data).map((p) => normalizeProject(p, prices));
+
         setProjects(list);
 
         if (id) {
-          const found = list.find((p) => p.key === id);
-          setProject(found ?? null);
+          setProject(list.find((p) => p.key === id) ?? null);
         } else {
           setProject(null);
         }
       } catch (err) {
         console.error('Error fetching projects', err);
         setProjects([]);
-        if (id) setProject(null);
+        setProject(null);
       } finally {
         setLoading(false);
       }
@@ -129,6 +125,8 @@ const useMarketplace = (id?: string): UseMarketplace => {
 
     fetchProjects();
   }, [id, prices]);
+
+  /* ================= FILTER + SORT ================= */
 
   const filteredProjects = useMemo(() => {
     let list = [...projects];
@@ -150,23 +148,24 @@ const useMarketplace = (id?: string): UseMarketplace => {
       list = list.filter((p) => p.vintages?.some((v) => selectedVintages.includes(v)));
     }
 
-    // sorting por RAW
     if (sortBy === 'price_asc') {
-      list.sort((a, b) => Number(a.displayPrice ?? 0) - Number(b.displayPrice ?? 0));
+      list.sort((a, b) => Number(a.displayPrice) - Number(b.displayPrice));
     }
+
     if (sortBy === 'price_desc') {
-      list.sort((a, b) => Number(b.displayPrice ?? 0) - Number(a.displayPrice ?? 0));
+      list.sort((a, b) => Number(b.displayPrice) - Number(a.displayPrice));
     }
 
     return list;
   }, [projects, searchTerm, selectedCountries, selectedCategories, selectedVintages, sortBy]);
 
   const availableCategories = useMemo(() => {
-    const cats = projects
-      .map((p) => p.category)
-      .filter((c): c is string => typeof c === 'string' && c.length > 0);
-    return Array.from(new Set(cats));
+    return Array.from(
+      new Set(projects.map((p) => p.category).filter((c): c is string => Boolean(c)))
+    );
   }, [projects]);
+
+  /* ================= RETIRE ================= */
 
   const handleRetire = (params: RetireParams) => {
     const currentProject = project ?? projects.find((p) => p.key === params.id) ?? null;
@@ -182,13 +181,11 @@ const useMarketplace = (id?: string): UseMarketplace => {
     sp.set('selectedVintage', params.selectedVintage || '0');
     sp.set('quantity', String(params.quantity));
 
-    // ✅ params.priceParam es RAW (sin markup)
     const raw = Number(params.priceParam);
     const finalPrice = Number.isFinite(raw) ? (raw * MARKUP).toFixed(2) : '0.00';
     sp.set('price', finalPrice);
 
-    const firstMethName = currentProject?.methodologies?.[0]?.name ?? 'Sin metodología';
-    sp.set('methodologyName', firstMethName);
+    sp.set('methodologyName', currentProject?.methodologies?.[0]?.name ?? 'Sin metodología');
 
     router.push(`/retireCheckout?${sp.toString()}`);
   };
@@ -206,6 +203,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
     setSelectedVintages,
     selectedUNSDG,
     setSelectedUNSDG,
+
     searchTerm,
     setSearchTerm,
     sortBy,

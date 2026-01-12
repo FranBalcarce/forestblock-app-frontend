@@ -1,7 +1,10 @@
-// src/types/marketplace.ts
+// src/types/marketplace.d.ts
+import React from 'react';
 import { Project } from './project';
 
-export type AssetPriceType = 'listing'; // v18: solo listing :contentReference[oaicite:1]{index=1}
+/* ================= PRICES ================= */
+
+export type AssetPriceType = 'listing'; // v18
 
 export interface ListingCreditId {
   vintage: number;
@@ -35,52 +38,75 @@ export interface Price {
   minFillAmount: number;
   listing?: ListingPricePayload;
 
-  // compat (legacy). Idealmente lo removés cuando ya migraste todo.
+  // compat (legacy)
   carbonPool?: {
-    creditId: { vintage: number; projectId: string; creditId: string };
+    creditId: {
+      vintage: number;
+      projectId: string;
+      creditId: string;
+    };
     token: ListingToken;
   };
 }
 
-export type Match = Price;
+/* ================= SORT ================= */
+
+// ✅ NUEVO: sort tipado (arregla error TS)
+export type SortBy = 'price_asc' | 'price_desc';
+
+/* ================= RETIRE ================= */
+
+export type RetireParams = {
+  id: string; // projectId (ej "VCS-844")
+  index: number; // índice del match elegido
+  priceParam: string; // precio RAW (string)
+  selectedVintage?: string;
+  quantity: number;
+};
+
+/* ================= HOOK ================= */
 
 export interface UseMarketplace {
   filteredProjects: Project[];
   loading: boolean;
 
   availableCategories: string[];
+
   selectedCountries: string[];
   setSelectedCountries: React.Dispatch<React.SetStateAction<string[]>>;
+
   selectedCategories: string[];
   setSelectedCategories: React.Dispatch<React.SetStateAction<string[]>>;
+
   selectedVintages: string[];
   setSelectedVintages: React.Dispatch<React.SetStateAction<string[]>>;
+
   selectedUNSDG: string[];
   setSelectedUNSDG: React.Dispatch<React.SetStateAction<string[]>>;
+
   searchTerm: string;
   setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
-  sortBy: string;
-  setSortBy: React.Dispatch<React.SetStateAction<string>>;
+
+  // ✅ CORREGIDO
+  sortBy: SortBy;
+  setSortBy: React.Dispatch<React.SetStateAction<SortBy>>;
 
   projects: Project[];
-  setProjects?: React.Dispatch<React.SetStateAction<Project[]>>;
+  setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
 
   project: Project | null;
+
   handleRetire: (params: RetireParams) => void;
 
   prices: Price[];
   isPricesLoading: boolean;
 }
 
-export type RetireParams = {
-  id: string; // projectId (ej "VCS-844")
-  index: number; // índice del match elegido
-  priceParam: string; // purchasePrice string
-  selectedVintage: string; // vintage elegido
-  quantity: number; // ✅ obligatorio
-};
-// ✅ Compatibilidad con imports viejos (useRetirementCheckout)
+/* ================= COMPAT ================= */
+
+// compatibilidad con imports viejos
 export type Listing = Price;
+export type Match = Price;
 
 // import { Project } from './project';
 // export interface Price {
