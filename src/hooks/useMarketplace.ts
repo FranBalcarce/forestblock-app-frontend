@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 import type { Project } from '@/types/project';
-import type { Price, UseMarketplace, RetireParams, SortBy } from '@/types/marketplace';
+import type { Price, UseMarketplace, SortBy } from '@/types/marketplace';
 
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
@@ -10,8 +9,6 @@ const ENDPOINTS = {
   projects: '/api/carbon/carbonProjects',
   prices: '/api/carbon/prices',
 };
-
-const MARKUP = 1.15;
 
 type UnknownRecord = Record<string, unknown>;
 const isRecord = (v: unknown): v is UnknownRecord => typeof v === 'object' && v !== null;
@@ -55,8 +52,6 @@ function normalizeProject(p: Project, prices: Price[]): Project {
 }
 
 const useMarketplace = (id?: string): UseMarketplace => {
-  const router = useRouter();
-
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [prices, setPrices] = useState<Price[]>([]);

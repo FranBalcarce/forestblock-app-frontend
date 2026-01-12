@@ -9,8 +9,6 @@ import TopBar from '@/components/TopBar/TopBar';
 import useMarketplaceFilters from '@/hooks/useMarketplaceFilters';
 import dynamic from 'next/dynamic';
 
-import type { SortBy } from '@/types/marketplace'; // ✅ IMPORTANTE
-
 // 👇 ProjectList solo en el cliente
 const ProjectList = dynamic(() => import('@/components/Marketplace/ProjectList'), { ssr: false });
 

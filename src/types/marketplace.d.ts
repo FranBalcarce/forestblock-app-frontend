@@ -1,18 +1,10 @@
-// src/types/marketplace.d.ts
-import React from 'react';
-import { Project } from './project';
-import type { SortBy } from './marketplace';
+import type { Project } from './project';
 
-sortBy: SortBy;
-setSortBy: React.Dispatch<React.SetStateAction<SortBy>>;
-
-/* ================= PRICES ================= */
-
-export type AssetPriceType = 'listing'; // v18
+export type SortBy = 'price_asc' | 'price_desc' | 'recently_updated' | 'newest' | 'oldest' | 'name';
 
 export interface ListingCreditId {
   vintage: number;
-  projectId: string; // ej: "VCS-844"
+  projectId: string;
 }
 
 export interface ListingToken {
@@ -35,82 +27,50 @@ export interface ListingPricePayload {
 
 export interface Price {
   sourceId: string;
-  type: AssetPriceType; // 'listing'
+  type: 'listing';
   purchasePrice: number;
   baseUnitPrice: number;
   supply: number;
   minFillAmount: number;
   listing?: ListingPricePayload;
-
-  // compat (legacy)
   carbonPool?: {
-    creditId: {
-      vintage: number;
-      projectId: string;
-      creditId: string;
-    };
+    creditId: { vintage: number; projectId: string; creditId: string };
     token: ListingToken;
   };
 }
-
-/* ================= SORT ================= */
-
-// ✅ NUEVO: sort tipado (arregla error TS)
-export type SortBy = 'price_asc' | 'price_desc' | 'recently_updated' | 'newest' | 'oldest' | 'name';
-
-/* ================= RETIRE ================= */
-
-export type RetireParams = {
-  id: string; // projectId (ej "VCS-844")
-  index: number; // índice del match elegido
-  priceParam: string; // precio RAW (string)
-  selectedVintage?: string;
-  quantity: number;
-};
-
-/* ================= HOOK ================= */
 
 export interface UseMarketplace {
   filteredProjects: Project[];
   loading: boolean;
 
   availableCategories: string[];
-
   selectedCountries: string[];
   setSelectedCountries: React.Dispatch<React.SetStateAction<string[]>>;
-
   selectedCategories: string[];
   setSelectedCategories: React.Dispatch<React.SetStateAction<string[]>>;
-
   selectedVintages: string[];
   setSelectedVintages: React.Dispatch<React.SetStateAction<string[]>>;
-
   selectedUNSDG: string[];
   setSelectedUNSDG: React.Dispatch<React.SetStateAction<string[]>>;
-
   searchTerm: string;
   setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
-
-  // ✅ CORREGIDO
   sortBy: SortBy;
   setSortBy: React.Dispatch<React.SetStateAction<SortBy>>;
 
   projects: Project[];
-  setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
-
   project: Project | null;
-
-  handleRetire: (params: RetireParams) => void;
 
   prices: Price[];
   isPricesLoading: boolean;
+
+  handleRetire: (params: {
+    id: string;
+    index: number;
+    priceParam: string;
+    selectedVintage: string;
+    quantity: number;
+  }) => void;
 }
-
-/* ================= COMPAT ================= */
-
-// compatibilidad con imports viejos
-export type Listing = Price;
-export type Match = Price;
 
 // import { Project } from './project';
 // export interface Price {
