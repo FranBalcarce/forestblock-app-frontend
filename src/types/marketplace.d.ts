@@ -1,6 +1,10 @@
 // src/types/marketplace.d.ts
 import React from 'react';
 import { Project } from './project';
+import type { SortBy } from './marketplace';
+
+sortBy: SortBy;
+setSortBy: React.Dispatch<React.SetStateAction<SortBy>>;
 
 /* ================= PRICES ================= */
 
@@ -52,7 +56,7 @@ export interface Price {
 /* ================= SORT ================= */
 
 // ✅ NUEVO: sort tipado (arregla error TS)
-export type SortBy = 'price_asc' | 'price_desc';
+export type SortBy = 'price_asc' | 'price_desc' | 'recently_updated' | 'newest' | 'oldest' | 'name';
 
 /* ================= RETIRE ================= */
 

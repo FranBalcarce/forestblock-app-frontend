@@ -7,9 +7,11 @@ import { SDG_TITLES, hardcodedVintages } from '@/constants/index';
 import HeaderSection from '@/components/Marketplace/HeaderSection';
 import TopBar from '@/components/TopBar/TopBar';
 import useMarketplaceFilters from '@/hooks/useMarketplaceFilters';
-import dynamic from 'next/dynamic'; // 👈 NUEVO
+import dynamic from 'next/dynamic';
 
-// 👇 ProjectList solo en el cliente (evita "window is not defined" por Leaflet)
+import type { SortBy } from '@/types/marketplace'; // ✅ IMPORTANTE
+
+// 👇 ProjectList solo en el cliente
 const ProjectList = dynamic(() => import('@/components/Marketplace/ProjectList'), { ssr: false });
 
 const MarketplaceClient: React.FC = () => {
@@ -74,8 +76,8 @@ const MarketplaceClient: React.FC = () => {
           <ProjectList
             loading={loading}
             projects={filteredProjects}
-            sortBy={sortBy}
-            setSortBy={setSortBy}
+            sortBy={sortBy} // ✅ SortBy
+            setSortBy={setSortBy} // ✅ Dispatch<SortBy>
             openFilters={() => setMobileFiltersOpen(true)}
           />
         </div>
@@ -92,6 +94,7 @@ const MarketplaceClient: React.FC = () => {
               &times;
             </button>
           </div>
+
           <FilterSidebar
             countries={countries}
             selectedCountries={selectedCountries}

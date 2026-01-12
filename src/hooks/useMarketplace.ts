@@ -6,17 +6,12 @@ import type { Price, UseMarketplace, RetireParams, SortBy } from '@/types/market
 
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
-/* ================= ENDPOINTS ================= */
-
 const ENDPOINTS = {
   projects: '/api/carbon/carbonProjects',
   prices: '/api/carbon/prices',
 };
 
-// markup solo UI + checkout
 const MARKUP = 1.15;
-
-/* ================= HELPERS ================= */
 
 type UnknownRecord = Record<string, unknown>;
 const isRecord = (v: unknown): v is UnknownRecord => typeof v === 'object' && v !== null;
@@ -39,7 +34,7 @@ function computeMinRawPriceForProject(projectKey: string, prices: Price[]): numb
   let min: number | null = null;
   for (const pr of filtered) {
     const val = pr.purchasePrice ?? pr.baseUnitPrice;
-    if (!Number.isFinite(val)) continue;
+    if (typeof val !== 'number' || !Number.isFinite(val)) continue;
     if (min === null || val < min) min = val;
   }
   return min;
@@ -47,27 +42,25 @@ function computeMinRawPriceForProject(projectKey: string, prices: Price[]): numb
 
 function normalizeProject(p: Project, prices: Price[]): Project {
   const minRawPrice = computeMinRawPriceForProject(p.key, prices);
-  const fallbackRaw = Number.isFinite(Number(p.price)) ? Number(p.price) : 0;
+  const fallbackRaw = p.price != null ? Number(p.price) : 0;
   const raw = minRawPrice ?? fallbackRaw;
 
   return {
     ...p,
     images: p.images ?? [],
     description: p.short_description || p.description || 'No description available',
-    displayPrice: raw.toFixed(2), // 🔴 RAW sin markup
+    displayPrice: raw.toFixed(2),
     selectedVintage: p.vintages?.[0],
   };
 }
-
-/* ================= HOOK ================= */
 
 const useMarketplace = (id?: string): UseMarketplace => {
   const router = useRouter();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
-
   const [prices, setPrices] = useState<Price[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [isPricesLoading, setIsPricesLoading] = useState(true);
 
@@ -79,16 +72,14 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
-  /* ================= PRICES ================= */
-
+  // PRECIOS
   useEffect(() => {
     const fetchPrices = async () => {
       try {
         setIsPricesLoading(true);
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices);
         setPrices(unwrapArray<Price>(res.data));
-      } catch (err) {
-        console.error('Error fetching prices', err);
+      } catch {
         setPrices([]);
       } finally {
         setIsPricesLoading(false);
@@ -97,16 +88,13 @@ const useMarketplace = (id?: string): UseMarketplace => {
     fetchPrices();
   }, []);
 
-  /* ================= PROJECTS ================= */
-
+  // PROYECTOS
   useEffect(() => {
     const fetchProjects = async () => {
       try {
         setLoading(true);
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
-
         const list = unwrapArray<Project>(res.data).map((p) => normalizeProject(p, prices));
-
         setProjects(list);
 
         if (id) {
@@ -114,19 +102,12 @@ const useMarketplace = (id?: string): UseMarketplace => {
         } else {
           setProject(null);
         }
-      } catch (err) {
-        console.error('Error fetching projects', err);
-        setProjects([]);
-        setProject(null);
       } finally {
         setLoading(false);
       }
     };
-
     fetchProjects();
   }, [id, prices]);
-
-  /* ================= FILTER + SORT ================= */
 
   const filteredProjects = useMemo(() => {
     let list = [...projects];
@@ -136,65 +117,20 @@ const useMarketplace = (id?: string): UseMarketplace => {
       list = list.filter((p) => p.name?.toLowerCase().includes(s));
     }
 
-    if (selectedCountries.length) {
-      list = list.filter((p) => selectedCountries.includes(p.country));
-    }
-
-    if (selectedCategories.length) {
-      list = list.filter((p) => selectedCategories.includes(p.category ?? ''));
-    }
-
-    if (selectedVintages.length) {
-      list = list.filter((p) => p.vintages?.some((v) => selectedVintages.includes(v)));
-    }
-
     if (sortBy === 'price_asc') {
       list.sort((a, b) => Number(a.displayPrice) - Number(b.displayPrice));
     }
-
     if (sortBy === 'price_desc') {
       list.sort((a, b) => Number(b.displayPrice) - Number(a.displayPrice));
     }
 
     return list;
-  }, [projects, searchTerm, selectedCountries, selectedCategories, selectedVintages, sortBy]);
-
-  const availableCategories = useMemo(() => {
-    return Array.from(
-      new Set(projects.map((p) => p.category).filter((c): c is string => Boolean(c)))
-    );
-  }, [projects]);
-
-  /* ================= RETIRE ================= */
-
-  const handleRetire = (params: RetireParams) => {
-    const currentProject = project ?? projects.find((p) => p.key === params.id) ?? null;
-
-    if (typeof window !== 'undefined' && currentProject) {
-      localStorage.setItem('project', JSON.stringify(currentProject));
-      localStorage.setItem('selectedVintage', params.selectedVintage || '0');
-      localStorage.setItem('quantity', String(params.quantity));
-    }
-
-    const sp = new URLSearchParams();
-    sp.set('index', String(params.index));
-    sp.set('selectedVintage', params.selectedVintage || '0');
-    sp.set('quantity', String(params.quantity));
-
-    const raw = Number(params.priceParam);
-    const finalPrice = Number.isFinite(raw) ? (raw * MARKUP).toFixed(2) : '0.00';
-    sp.set('price', finalPrice);
-
-    sp.set('methodologyName', currentProject?.methodologies?.[0]?.name ?? 'Sin metodología');
-
-    router.push(`/retireCheckout?${sp.toString()}`);
-  };
+  }, [projects, searchTerm, sortBy]);
 
   return {
     filteredProjects,
     loading,
-    availableCategories,
-
+    availableCategories: [],
     selectedCountries,
     setSelectedCountries,
     selectedCategories,
@@ -203,18 +139,14 @@ const useMarketplace = (id?: string): UseMarketplace => {
     setSelectedVintages,
     selectedUNSDG,
     setSelectedUNSDG,
-
     searchTerm,
     setSearchTerm,
     sortBy,
     setSortBy,
-
     projects,
     setProjects,
     project,
-
-    handleRetire,
-
+    handleRetire: () => {},
     prices,
     isPricesLoading,
   };
