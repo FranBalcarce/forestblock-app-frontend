@@ -1,96 +1,124 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { useRouter } from "next/navigation";
-import { useRetire } from "@/context/RetireContext";
-import {
-  MAX_MONITORING_TIME,
-  POLLING_INTERVAL,
-  PRICE_MULTIPLIER,
-} from "@/constants";
-import { Listing } from "@/types/marketplace";
-import { PaymentDetails } from "@/types/retirement";
-import axiosInstance from "@/utils/axios/axiosInstance";
-import type { AxiosError } from "axios";
-import qs from "qs";
-import { useAuth } from "@/context/AuthContext";
-import { axiosPublicInstance } from "@/utils/axios/axiosPublicInstance";
+import { useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import qs from 'qs';
+import type { AxiosError } from 'axios';
+
+import { useRetire } from '@/context/RetireContext';
+import { useAuth } from '@/context/AuthContext';
+
+import { MAX_MONITORING_TIME, POLLING_INTERVAL, PRICE_MULTIPLIER } from '@/constants';
+
+import type { Price } from '@/types/marketplace';
+import type { PaymentDetails } from '@/types/retirement';
+
+import axiosInstance from '@/utils/axios/axiosInstance';
+import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
+
+/** Helpers para soportar payloads tipo: [] | {items: []} | {data: []} */
+type UnknownRecord = Record<string, unknown>;
+const isRecord = (v: unknown): v is UnknownRecord => typeof v === 'object' && v !== null;
+
+function unwrapArray<T>(payload: unknown): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  if (isRecord(payload) && Array.isArray(payload.items)) return payload.items as T[];
+  if (isRecord(payload) && Array.isArray(payload.data)) return payload.data as T[];
+  return [];
+}
 
 export const useRetireCheckout = (index?: string | null) => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const projectIds = searchParams.get("projectIds");
-  const priceParam = searchParams.get("priceParam");
-  const selectedVintage = searchParams.get("selectedVintage");
+
+  // En tu app esto a veces viene como "priceParam" y otras como "price"
+  const projectIds = searchParams.get('projectIds');
+  const priceParam = searchParams.get('priceParam') ?? searchParams.get('price');
+  const selectedVintage = searchParams.get('selectedVintage');
 
   const { user } = useAuth();
 
-  const {
-    tonnesToRetire,
-    setTonnesToRetire,
-    project,
-    setProject,
-    setTotalSupply,
-  } = useRetire();
+  const { tonnesToRetire, setTonnesToRetire, project, setProject, setTotalSupply } = useRetire();
 
-  const [listing, setListing] = useState<Listing | null>(null);
+  const [listing, setListing] = useState<Price | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [formSubmitted, setFormSubmitted] = useState<boolean>(false);
-  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails | null>(
-    null
-  );
-  const [paymentStatus, setPaymentStatus] = useState<string>("PENDING");
+  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<string>('PENDING');
   const [monitoring, setMonitoring] = useState<boolean>(false);
   const [amountReceived, setAmountReceived] = useState<number>(0);
 
   useEffect(() => {
     const fetchListing = async () => {
       if (!projectIds) {
-        setError("Listing ID is missing.");
+        setError('Listing ID is missing.');
         setLoading(false);
         return;
       }
 
       try {
-        const response = await axiosPublicInstance.get("/carbon/prices", {
+        // ✅ Traemos prices (v18) — puede venir array directo o envuelto
+        const response = await axiosPublicInstance.get<unknown>('/carbon/prices', {
           params: { projectIds },
-          paramsSerializer: (params) =>
-            qs.stringify(params, { arrayFormat: "repeat" }),
+          paramsSerializer: (params) => qs.stringify(params, { arrayFormat: 'repeat' }),
         });
 
-        const listingData = response.data.find((item: Listing) => {
-          const matchesPrice =
-            item.purchasePrice * PRICE_MULTIPLIER === Number(priceParam);
+        const allPrices = unwrapArray<Price>(response);
 
-          if (selectedVintage !== undefined && selectedVintage !== null) {
-            return (
-              matchesPrice &&
-              item?.carbonPool?.creditId?.vintage === Number(selectedVintage)
-            );
+        // Tu UI suele mandar el precio con markup ya aplicado.
+        // Entonces comparamos contra RAW (dividiendo por el multiplicador).
+        const targetFinal = Number(priceParam);
+        const targetRaw = Number.isFinite(targetFinal) ? targetFinal / PRICE_MULTIPLIER : NaN;
+
+        const targetVintage =
+          selectedVintage !== undefined && selectedVintage !== null
+            ? Number(selectedVintage)
+            : null;
+
+        const matches = (item: Price) => {
+          const raw =
+            typeof item.purchasePrice === 'number' ? item.purchasePrice : item.baseUnitPrice;
+
+          const matchesPrice = Number.isFinite(targetRaw) ? raw === targetRaw : false;
+
+          if (targetVintage !== null && Number.isFinite(targetVintage)) {
+            const v = item.listing?.creditId?.vintage ?? item.carbonPool?.creditId?.vintage ?? null;
+
+            return matchesPrice && v === targetVintage;
           }
 
           return matchesPrice;
-        });
+        };
+
+        let listingData = allPrices.find(matches);
+
+        // fallback: si no matchea por precio, usá el índice que llega por query
+        if (!listingData && index != null) {
+          const idx = Number(index);
+          if (Number.isFinite(idx) && allPrices[idx]) listingData = allPrices[idx];
+        }
 
         if (listingData) {
-          const updatedListing = {
+          // Guardamos el precio FINAL (con markup) para que calculateTotalCost funcione
+          const raw =
+            typeof listingData.purchasePrice === 'number'
+              ? listingData.purchasePrice
+              : listingData.baseUnitPrice;
+
+          const updatedListing: Price = {
             ...listingData,
-            purchasePrice: listingData?.purchasePrice * PRICE_MULTIPLIER,
+            purchasePrice: raw * PRICE_MULTIPLIER,
           };
+
           setListing(updatedListing);
         } else {
-          const fallbackListing = response.data[Number(index)];
-          const updatedFallback = {
-            ...fallbackListing,
-            purchasePrice: fallbackListing?.purchasePrice * PRICE_MULTIPLIER,
-          };
-          setListing(updatedFallback);
+          setListing(null);
+          setError('No se encontró un precio/listing válido para este proyecto.');
         }
       } catch (err) {
         console.error(err);
-        setError("Failed to load listing data. Please try again. " + err);
+        setError('Failed to load listing data. Please try again. ' + String(err));
       } finally {
         setLoading(false);
       }
@@ -100,36 +128,34 @@ export const useRetireCheckout = (index?: string | null) => {
       try {
         if (!projectIds) return;
 
-        if (typeof window !== "undefined") {
-          const storedProject = localStorage.getItem("project");
-          if (storedProject) {
-            setProject(JSON.parse(storedProject));
-          }
+        // cache local
+        if (typeof window !== 'undefined') {
+          const storedProject = localStorage.getItem('project');
+          if (storedProject) setProject(JSON.parse(storedProject));
         }
 
-        const response = await axiosPublicInstance.get(
-          `/carbon/carbonProjects/${projectIds}`
-        );
+        const response = await axiosPublicInstance.get(`/carbon/carbonProjects/${projectIds}`);
+        const data = (response as any)?.data ?? response;
 
-        const data = response.data;
         setTotalSupply(data?.stats?.totalSupply);
         setProject(data);
 
-        if (typeof window !== "undefined") {
+        if (typeof window !== 'undefined') {
           const projectToStore = {
             ...data,
-            selectedVintage: selectedVintage ?? "0",
+            selectedVintage: selectedVintage ?? '0',
           };
-          localStorage.setItem("project", JSON.stringify(projectToStore));
+          localStorage.setItem('project', JSON.stringify(projectToStore));
         }
-      } catch (error) {
-        console.error("Error fetching project details:", error);
+      } catch (e) {
+        console.error('Error fetching project details:', e);
       }
     };
 
     fetchProject();
     fetchListing();
-  }, [searchParams, projectIds, setProject, index, priceParam]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectIds, index, priceParam, selectedVintage]);
 
   const changePaymentStatus = async (
     paymentId: string,
@@ -137,18 +163,13 @@ export const useRetireCheckout = (index?: string | null) => {
     stripeSessionId: string
   ): Promise<boolean> => {
     try {
-      const updatePaymentStatus = await axiosInstance.put(
-        "payments/change-payment-status",
-        {
-          paymentId,
-          status,
-          stripeSessionId,
-        }
-      );
+      const updatePaymentStatus = await axiosInstance.put('payments/change-payment-status', {
+        paymentId,
+        status,
+        stripeSessionId,
+      });
 
-      if (updatePaymentStatus?.data.status === "CONFIRMED") {
-        return true;
-      }
+      if (updatePaymentStatus?.data.status === 'CONFIRMED') return true;
     } catch (err) {
       console.error(err);
     }
@@ -162,54 +183,42 @@ export const useRetireCheckout = (index?: string | null) => {
     const amount = calculateTotalCost();
 
     if (amount <= 0) {
-      alert("Please enter a valid number of tonnes to retire.");
+      alert('Please enter a valid number of tonnes to retire.');
       return;
     }
 
     if (amount < 0.5) {
-      alert("El importe total debe ser de al menos 0,50 USD");
+      alert('El importe total debe ser de al menos 0,50 USD');
       return;
     }
 
     try {
-      const paymentResponse = await axiosInstance.post(
-        "payments/generate-payment",
-        {
-          amount: calculateTotalCost(),
-          tonnesToRetire,
-          userId: user?._id,
-          type: "stripe",
-          formData,
-        }
-      );
+      const paymentResponse = await axiosInstance.post('payments/generate-payment', {
+        amount: calculateTotalCost(),
+        tonnesToRetire,
+        userId: user?._id,
+        type: 'stripe',
+        formData,
+      });
 
-      const response = await axiosInstance.post(
-        "/payments/create-checkout-session",
-        {
-          pricePerUnit: listing?.purchasePrice,
-          quantity: tonnesToRetire,
-          paymentId: paymentResponse?.data.paymentData.paymentId,
-          name: listing?.listing
-            ? listing?.listing.id
-            : listing?.carbonPool?.creditId?.projectId,
-        }
-      );
+      const response = await axiosInstance.post('/payments/create-checkout-session', {
+        pricePerUnit: listing?.purchasePrice,
+        quantity: tonnesToRetire,
+        paymentId: paymentResponse?.data.paymentData.paymentId,
+        name: listing?.listing ? listing.listing.id : listing?.carbonPool?.creditId?.projectId,
+      });
 
-      if (
-        typeof window !== "undefined" &&
-        response.status === 200 &&
-        response.data.url
-      ) {
+      if (typeof window !== 'undefined' && response.status === 200 && response.data.url) {
         window.location.href = response.data.url;
       } else {
-        console.log("Error creating Stripe Checkout session:", response);
+        console.log('Error creating Stripe Checkout session:', response);
       }
     } catch (error) {
-      console.log("Error creating Stripe Checkout session: ", error);
+      console.log('Error creating Stripe Checkout session: ', error);
       const errorMessage =
         (error as AxiosError<{ message: string }>)?.response?.data?.message ||
         (error as Error).message ||
-        "Ocurrió un error";
+        'Ocurrió un error';
       alert(errorMessage);
     }
   };
@@ -220,22 +229,25 @@ export const useRetireCheckout = (index?: string | null) => {
     formData: { beneficiary: string; message: string }
   ) => {
     e.preventDefault();
+
     if (selectedPayment === null) {
-      alert("Debes seleccionar un medio de pago :)");
+      alert('Debes seleccionar un medio de pago :)');
       return;
     }
+
     if (tonnesToRetire <= 0 || tonnesToRetire > (listing?.supply ?? 0)) {
-      setError("Please enter a valid number of tonnes to retire.");
+      setError('Please enter a valid number of tonnes to retire.');
       return;
     }
-    if (selectedPayment === "usdt") {
+
+    if (selectedPayment === 'usdt') {
       try {
-        const response = await axiosInstance.post("payments/generate-payment", {
+        const response = await axiosInstance.post('payments/generate-payment', {
           amount: calculateTotalCost(),
-          listingId: listing?.listing?.id,
+          listingId: listing?.listing?.id, // en v18: si existe listing.id
           tonnesToRetire,
           userId: user?._id,
-          type: "usdt",
+          type: 'usdt',
         });
 
         const orderData = {
@@ -248,13 +260,13 @@ export const useRetireCheckout = (index?: string | null) => {
         setFormSubmitted(true);
         setMonitoring(true);
 
-        localStorage.setItem("pendingPayment", JSON.stringify(orderData));
+        localStorage.setItem('pendingPayment', JSON.stringify(orderData));
 
         setError(null);
       } catch (err) {
-        setError("Failed to create payment. Please try again. " + err);
+        setError('Failed to create payment. Please try again. ' + String(err));
       }
-    } else if (selectedPayment === "credit-card") {
+    } else if (selectedPayment === 'credit-card') {
       handleStripeCheckout(formData);
     }
   };
@@ -268,42 +280,39 @@ export const useRetireCheckout = (index?: string | null) => {
         if (!paymentDetails?.paymentData?.paymentId) {
           clearInterval(interval);
           setMonitoring(false);
-          alert("Error: Missing payment ID. Please try again.");
+          alert('Error: Missing payment ID. Please try again.');
           return;
         }
 
-        const response = await axiosInstance.get(
-          `payments/check-payment-status`,
-          {
-            params: { paymentId: paymentDetails.paymentData.paymentId },
-          }
-        );
+        const response = await axiosInstance.get(`payments/check-payment-status`, {
+          params: { paymentId: paymentDetails.paymentData.paymentId },
+        });
 
         const { status, amountReceived } = response.data;
 
         setPaymentStatus(status);
         setAmountReceived(amountReceived);
 
-        if (["CONFIRMED", "FAILED"].includes(status)) {
+        if (['CONFIRMED', 'FAILED'].includes(status)) {
           clearInterval(interval);
           setMonitoring(false);
 
-          if (status === "CONFIRMED") {
+          if (status === 'CONFIRMED') {
             router.push(
               `/retirementSteps?paymentId=${paymentDetails.paymentData.paymentId}&selectedVintage=${selectedVintage}`
             );
           } else {
-            alert("Payment failed. Please try again.");
+            alert('Payment failed. Please try again.');
           }
         } else if (Date.now() - startTime >= MAX_MONITORING_TIME) {
           clearInterval(interval);
           setMonitoring(false);
-          alert("Monitoring timed out. Payment status not confirmed.");
+          alert('Monitoring timed out. Payment status not confirmed.');
         }
       } catch {
         clearInterval(interval);
         setMonitoring(false);
-        alert("Error monitoring payment status. Please try again.");
+        alert('Error monitoring payment status. Please try again.');
       }
     }, POLLING_INTERVAL);
 
@@ -311,7 +320,7 @@ export const useRetireCheckout = (index?: string | null) => {
   }, [monitoring, paymentDetails, router, selectedVintage]);
 
   useEffect(() => {
-    const storedPayment = localStorage.getItem("pendingPayment");
+    const storedPayment = localStorage.getItem('pendingPayment');
     if (storedPayment) {
       const parsedPayment = JSON.parse(storedPayment);
       setPaymentDetails(parsedPayment.paymentData);
