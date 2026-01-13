@@ -20,10 +20,6 @@ function unwrapArray<T>(payload: unknown): T[] {
   return [];
 }
 
-function getProjectKeyFromPrice(p: Price): string | undefined {
-  return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
-}
-
 function computeMinRawPriceForProject(projectKey: string, prices: Price[]): number | null {
   const filtered = prices.filter(
     (p) =>
@@ -35,23 +31,15 @@ function computeMinRawPriceForProject(projectKey: string, prices: Price[]): numb
 
   let min: number | null = null;
 
-  for (const p of filtered) {
-    const value =
-      typeof p.purchasePrice === 'number'
-        ? p.purchasePrice
-        : typeof p.baseUnitPrice === 'number'
-        ? p.baseUnitPrice
-        : null;
-
-    if (value === null) continue;
-
-    if (min === null || value < min) {
-      min = value;
-    }
+  for (const pr of filtered) {
+    const val = pr.purchasePrice ?? pr.baseUnitPrice;
+    if (typeof val !== 'number' || !Number.isFinite(val)) continue;
+    if (min === null || val < min) min = val;
   }
 
   return min;
 }
+
 function normalizeProject(p: Project, prices: Price[]): Project {
   const minRawPrice = computeMinRawPriceForProject(p.key, prices);
 
