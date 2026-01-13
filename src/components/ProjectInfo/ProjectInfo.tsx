@@ -3,15 +3,10 @@
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
 
 import Button from '@/components/Marketplace/Button';
-import { useGallery } from '@/hooks/useGallery';
-
 import type { Project } from '@/types/project';
 import type { Price, RetireParams } from '@/types/marketplace';
-
-const MapView = dynamic(() => import('./MapView'), { ssr: false });
 
 const getImageUrl = (img: unknown): string | null => {
   if (!img) return null;
@@ -91,7 +86,7 @@ export default function ProjectInfo({
           {coverUrl ? (
             <Image src={coverUrl} alt={project.name} fill style={{ objectFit: 'cover' }} />
           ) : (
-            <div className="h-full flex items-center justify-center">Sin imagen</div>
+            <div className="h-full flex items-center justify-center text-black/40">Sin imagen</div>
           )}
         </div>
 

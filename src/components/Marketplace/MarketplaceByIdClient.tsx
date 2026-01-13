@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import useMarketplace, { computeMinRawPriceForProject } from '@/hooks/useMarketplace';
+import useMarketplace from '@/hooks/useMarketplace';
 import ProjectInfo from '@/components/ProjectInfo/ProjectInfo';
 import LoaderScreenDynamic from '@/components/LoaderScreen/LoaderScreenDynamic';
 
