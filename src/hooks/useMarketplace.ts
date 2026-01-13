@@ -25,28 +25,45 @@ function getProjectKeyFromPrice(p: Price): string | undefined {
 }
 
 function computeMinRawPriceForProject(projectKey: string, prices: Price[]): number | null {
-  const filtered = prices.filter((p) => getProjectKeyFromPrice(p) === projectKey);
+  const filtered = prices.filter(
+    (p) =>
+      p.listing?.creditId?.projectId === projectKey ||
+      p.carbonPool?.creditId?.projectId === projectKey
+  );
+
   if (!filtered.length) return null;
 
   let min: number | null = null;
-  for (const pr of filtered) {
-    const val = pr.purchasePrice ?? pr.baseUnitPrice;
-    if (typeof val !== 'number' || !Number.isFinite(val)) continue;
-    if (min === null || val < min) min = val;
+
+  for (const p of filtered) {
+    const value =
+      typeof p.purchasePrice === 'number'
+        ? p.purchasePrice
+        : typeof p.baseUnitPrice === 'number'
+        ? p.baseUnitPrice
+        : null;
+
+    if (value === null) continue;
+
+    if (min === null || value < min) {
+      min = value;
+    }
   }
+
   return min;
 }
-
 function normalizeProject(p: Project, prices: Price[]): Project {
   const minRawPrice = computeMinRawPriceForProject(p.key, prices);
-  const fallbackRaw = p.price != null ? Number(p.price) : 0;
-  const raw = minRawPrice ?? fallbackRaw;
+
+  const fallbackRaw = p.price !== undefined && p.price !== null ? Number(p.price) : null;
+
+  const rawPrice = minRawPrice ?? fallbackRaw ?? 0;
 
   return {
     ...p,
-    images: p.images ?? [],
+    images: p.images && p.images.length ? p.images : [],
     description: p.short_description || p.description || 'No description available',
-    displayPrice: raw.toFixed(2),
+    displayPrice: rawPrice.toFixed(2),
     selectedVintage: p.vintages?.[0],
   };
 }
@@ -73,15 +90,40 @@ const useMarketplace = (id?: string): UseMarketplace => {
       try {
         setIsPricesLoading(true);
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices);
-        setPrices(unwrapArray<Price>(res.data));
-      } catch {
+
+        const parsedPrices = unwrapArray<Price>(res.data);
+
+        // 👇 LOG CLAVE (ponelo EXACTAMENTE ACÁ)
+        console.log('PRICES RAW:', parsedPrices);
+        console.log('FIRST PRICE:', parsedPrices[0]);
+
+        setPrices(parsedPrices);
+      } catch (err) {
+        console.error('ERROR FETCHING PRICES', err);
         setPrices([]);
       } finally {
         setIsPricesLoading(false);
       }
     };
+
     fetchPrices();
   }, []);
+
+  // // PRECIOS
+  // useEffect(() => {
+  //   const fetchPrices = async () => {
+  //     try {
+  //       setIsPricesLoading(true);
+  //       const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices);
+  //       setPrices(unwrapArray<Price>(res.data));
+  //     } catch {
+  //       setPrices([]);
+  //     } finally {
+  //       setIsPricesLoading(false);
+  //     }
+  //   };
+  //   fetchPrices();
+  // }, []);
 
   // PROYECTOS
   useEffect(() => {

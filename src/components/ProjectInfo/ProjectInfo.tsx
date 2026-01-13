@@ -3,13 +3,21 @@
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 
-import MapView from './MapView';
 import Button from '@/components/Marketplace/Button';
 import { useGallery } from '@/hooks/useGallery';
 
 import type { Project } from '@/types/project';
 import type { Price, RetireParams } from '@/types/marketplace';
+
+/* ✅ IMPORTANTE
+   MapView se importa de forma dinámica para evitar:
+   "window is not defined" en SSR (Leaflet)
+*/
+const MapView = dynamic(() => import('./MapView'), {
+  ssr: false,
+});
 
 // convierte cualquier cosa (Image | Image[] | string | etc) a URL string usable por next/image
 const getImageUrl = (img: unknown): string | null => {
@@ -74,7 +82,7 @@ export default function ProjectInfo({
   }, [project]);
 
   const { customIcon } = useGallery({
-    images: [project.images?.[0]],
+    images: project.images?.length ? [project.images[0]] : [],
   });
 
   const mapCoords = useMemo<[number, number] | null>(() => {
@@ -93,7 +101,6 @@ export default function ProjectInfo({
   const onBuy = () => {
     const first = matches?.[0];
 
-    // si viniste con ?price=..., lo uso. Si no, uso el primero que venga
     const effectivePriceParam =
       priceParam ?? (first?.purchasePrice != null ? String(first.purchasePrice) : '');
 
@@ -102,7 +109,7 @@ export default function ProjectInfo({
       index: 0,
       priceParam: effectivePriceParam,
       selectedVintage: selectedVintage || '',
-      quantity, // ✅ ahora sí
+      quantity,
     });
   };
 
@@ -133,24 +140,20 @@ export default function ProjectInfo({
         <div className="p-6">
           <h1 className="text-2xl md:text-3xl font-semibold">{project.name}</h1>
 
-          {/* Descripción */}
           <p className="mt-3 text-black/70 leading-relaxed">
             {project.description || project.short_description || ''}
           </p>
 
-          {/* Precio */}
           <div className="mt-5 text-base font-medium">
             Precio: <span className="font-semibold">${displayPrice}</span> / tCO₂
           </div>
 
-          {/* ✅ Selector cantidad + botón */}
           <div className="mt-6 flex flex-col gap-3 max-w-sm">
             <div className="inline-flex items-center justify-between rounded-2xl border border-black/10 bg-white px-3 py-2">
               <button
                 type="button"
                 onClick={dec}
                 className="h-10 w-10 rounded-xl bg-black/5 hover:bg-black/10 text-lg"
-                aria-label="Disminuir"
               >
                 −
               </button>
@@ -164,7 +167,6 @@ export default function ProjectInfo({
                 type="button"
                 onClick={inc}
                 className="h-10 w-10 rounded-xl bg-black/5 hover:bg-black/10 text-lg"
-                aria-label="Aumentar"
               >
                 +
               </button>
@@ -175,7 +177,7 @@ export default function ProjectInfo({
             </Button>
           </div>
 
-          {/* Mapa */}
+          {/* ✅ MAPA (solo cliente) */}
           {mapCoords && (
             <div className="mt-8">
               <div className="text-lg font-semibold mb-3">Ubicación</div>
@@ -194,7 +196,6 @@ export default function ProjectInfo({
             </div>
           )}
 
-          {/* Descripción larga */}
           {project.long_description && (
             <div className="mt-8">
               <div className="text-lg font-semibold mb-2">Descripción</div>
