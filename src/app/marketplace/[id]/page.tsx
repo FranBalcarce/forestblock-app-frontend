@@ -1,16 +1,18 @@
-// src/app/marketplace/[id]/page.tsx
 import { Suspense } from 'react';
 import MarketplaceByIdClient from '@/components/Marketplace/MarketplaceByIdClient';
 
-export const dynamic = 'force-dynamic';
+type Props = {
+  params: { id: string };
+  searchParams: { price?: string };
+};
 
-export default async function MarketplaceByIdPage({ params }: { params: Promise<{ id: string }> }) {
-  // ⚠️ Acá desestructuramos el id esperando el Promise
-  const { id } = await params;
+export default function MarketplaceByIdPage({ params, searchParams }: Props) {
+  const { id } = params;
+  const priceParam = searchParams?.price ?? null;
 
   return (
     <Suspense fallback={null}>
-      <MarketplaceByIdClient id={id} />
+      <MarketplaceByIdClient id={id} priceParam={priceParam} />
     </Suspense>
   );
 }
