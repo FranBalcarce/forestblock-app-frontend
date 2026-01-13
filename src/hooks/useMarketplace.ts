@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-
 import type { Project } from '@/types/project';
 import type { Price, UseMarketplace, SortBy } from '@/types/marketplace';
-
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
 const ENDPOINTS = {
@@ -20,12 +18,12 @@ function unwrapArray<T>(payload: unknown): T[] {
   return [];
 }
 
-function computeMinRawPriceForProject(projectKey: string, prices: Price[]): number | null {
-  const filtered = prices.filter(
-    (p) =>
-      p.listing?.creditId?.projectId === projectKey ||
-      p.carbonPool?.creditId?.projectId === projectKey
-  );
+function getProjectKeyFromPrice(p: Price): string | undefined {
+  return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
+}
+
+export function computeMinRawPriceForProject(projectKey: string, prices: Price[]): number | null {
+  const filtered = prices.filter((p) => getProjectKeyFromPrice(p) === projectKey);
 
   if (!filtered.length) return null;
 
@@ -40,18 +38,11 @@ function computeMinRawPriceForProject(projectKey: string, prices: Price[]): numb
   return min;
 }
 
-function normalizeProject(p: Project, prices: Price[]): Project {
-  const minRawPrice = computeMinRawPriceForProject(p.key, prices);
-
-  const fallbackRaw = p.price !== undefined && p.price !== null ? Number(p.price) : null;
-
-  const rawPrice = minRawPrice ?? fallbackRaw ?? 0;
-
+function normalizeProject(p: Project): Project {
   return {
     ...p,
-    images: p.images && p.images.length ? p.images : [],
+    images: p.images ?? [],
     description: p.short_description || p.description || 'No description available',
-    displayPrice: rawPrice.toFixed(2),
     selectedVintage: p.vintages?.[0],
   };
 }
@@ -72,54 +63,29 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
-  // PRECIOS
+  // 🔹 PRECIOS
   useEffect(() => {
     const fetchPrices = async () => {
       try {
         setIsPricesLoading(true);
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices);
-
-        const parsedPrices = unwrapArray<Price>(res.data);
-
-        // 👇 LOG CLAVE (ponelo EXACTAMENTE ACÁ)
-        console.log('PRICES RAW:', parsedPrices);
-        console.log('FIRST PRICE:', parsedPrices[0]);
-
-        setPrices(parsedPrices);
-      } catch (err) {
-        console.error('ERROR FETCHING PRICES', err);
+        setPrices(unwrapArray<Price>(res.data));
+      } catch {
         setPrices([]);
       } finally {
         setIsPricesLoading(false);
       }
     };
-
     fetchPrices();
   }, []);
 
-  // // PRECIOS
-  // useEffect(() => {
-  //   const fetchPrices = async () => {
-  //     try {
-  //       setIsPricesLoading(true);
-  //       const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices);
-  //       setPrices(unwrapArray<Price>(res.data));
-  //     } catch {
-  //       setPrices([]);
-  //     } finally {
-  //       setIsPricesLoading(false);
-  //     }
-  //   };
-  //   fetchPrices();
-  // }, []);
-
-  // PROYECTOS
+  // 🔹 PROYECTOS
   useEffect(() => {
     const fetchProjects = async () => {
       try {
         setLoading(true);
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
-        const list = unwrapArray<Project>(res.data).map((p) => normalizeProject(p, prices));
+        const list = unwrapArray<Project>(res.data).map(normalizeProject);
         setProjects(list);
 
         if (id) {
@@ -132,7 +98,7 @@ const useMarketplace = (id?: string): UseMarketplace => {
       }
     };
     fetchProjects();
-  }, [id, prices]);
+  }, [id]);
 
   const filteredProjects = useMemo(() => {
     let list = [...projects];
@@ -143,14 +109,23 @@ const useMarketplace = (id?: string): UseMarketplace => {
     }
 
     if (sortBy === 'price_asc') {
-      list.sort((a, b) => Number(a.displayPrice) - Number(b.displayPrice));
+      list.sort(
+        (a, b) =>
+          (computeMinRawPriceForProject(a.key, prices) ?? Infinity) -
+          (computeMinRawPriceForProject(b.key, prices) ?? Infinity)
+      );
     }
+
     if (sortBy === 'price_desc') {
-      list.sort((a, b) => Number(b.displayPrice) - Number(a.displayPrice));
+      list.sort(
+        (a, b) =>
+          (computeMinRawPriceForProject(b.key, prices) ?? 0) -
+          (computeMinRawPriceForProject(a.key, prices) ?? 0)
+      );
     }
 
     return list;
-  }, [projects, searchTerm, sortBy]);
+  }, [projects, prices, searchTerm, sortBy]);
 
   return {
     filteredProjects,

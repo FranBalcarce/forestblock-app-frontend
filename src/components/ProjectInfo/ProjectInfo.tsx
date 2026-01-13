@@ -11,18 +11,10 @@ import { useGallery } from '@/hooks/useGallery';
 import type { Project } from '@/types/project';
 import type { Price, RetireParams } from '@/types/marketplace';
 
-/* ✅ IMPORTANTE
-   MapView se importa de forma dinámica para evitar:
-   "window is not defined" en SSR (Leaflet)
-*/
-const MapView = dynamic(() => import('./MapView'), {
-  ssr: false,
-});
+const MapView = dynamic(() => import('./MapView'), { ssr: false });
 
-// convierte cualquier cosa (Image | Image[] | string | etc) a URL string usable por next/image
 const getImageUrl = (img: unknown): string | null => {
   if (!img) return null;
-
   if (typeof img === 'string') return img;
 
   if (Array.isArray(img)) {
@@ -30,18 +22,12 @@ const getImageUrl = (img: unknown): string | null => {
       const u = getImageUrl(item);
       if (u) return u;
     }
-    return null;
   }
 
   if (typeof img === 'object') {
     const o = img as Record<string, unknown>;
-    const direct = o.url ?? o.src ?? o.imageUrl;
-    if (typeof direct === 'string') return direct;
-
-    for (const k of ['banner', 'thumbnail', 'cover', 'image', 'main']) {
-      const u = getImageUrl(o[k]);
-      if (u) return u;
-    }
+    if (typeof o.url === 'string') return o.url;
+    if (typeof o.src === 'string') return o.src;
   }
 
   return null;
@@ -52,7 +38,6 @@ type Props = {
   handleRetire: (params: RetireParams) => void;
   matches: Price[];
   selectedVintage: string;
-  displayPrice: string;
   priceParam: string | null;
   isPricesLoading: boolean;
 };
@@ -62,148 +47,74 @@ export default function ProjectInfo({
   handleRetire,
   matches,
   selectedVintage,
-  displayPrice,
   priceParam,
   isPricesLoading,
 }: Props) {
   const router = useRouter();
+  const [quantity, setQuantity] = useState(1);
 
-  // ✅ selector de cantidad
-  const [quantity, setQuantity] = useState<number>(1);
+  const coverUrl = useMemo(
+    () => getImageUrl(project.coverImage) || getImageUrl(project.images?.[0]) || null,
+    [project]
+  );
 
-  // Cover: primero coverImage, si no la primera de images
-  const coverUrl = useMemo(() => {
-    return (
-      getImageUrl(project.coverImage) ||
-      getImageUrl(project.images?.[0]) ||
-      getImageUrl(project.images) ||
-      null
-    );
-  }, [project]);
+  const displayPrice = useMemo(() => {
+    if (!matches.length) return '—';
+    const p = matches[0].purchasePrice ?? matches[0].baseUnitPrice;
+    return typeof p === 'number' ? p.toFixed(2) : '—';
+  }, [matches]);
 
-  const { customIcon } = useGallery({
-    images: project.images?.length ? [project.images[0]] : [],
-  });
-
-  const mapCoords = useMemo<[number, number] | null>(() => {
-    const coords = project.location?.geometry?.coordinates;
-    if (!coords || coords.length < 2) return null;
-
-    const lng = Number(coords[0]);
-    const lat = Number(coords[1]);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-
-    return [lat, lng];
-  }, [project]);
-
-  const canBuy = !isPricesLoading && (matches?.length ?? 0) > 0;
+  const canBuy = !isPricesLoading && matches.length > 0;
 
   const onBuy = () => {
-    const first = matches?.[0];
-
-    const effectivePriceParam =
-      priceParam ?? (first?.purchasePrice != null ? String(first.purchasePrice) : '');
-
+    const first = matches[0];
     handleRetire({
       id: project.key,
       index: 0,
-      priceParam: effectivePriceParam,
-      selectedVintage: selectedVintage || '',
+      priceParam: priceParam ?? String(first.purchasePrice),
+      selectedVintage,
       quantity,
     });
   };
 
-  const dec = () => setQuantity((q) => Math.max(1, q - 1));
-  const inc = () => setQuantity((q) => q + 1);
-
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-6 md:py-10">
+    <div className="w-full max-w-6xl mx-auto px-4 py-6">
       <button
         onClick={() => router.back()}
-        className="mb-4 rounded-full bg-black/5 px-4 py-2 text-sm hover:bg-black/10"
+        className="mb-4 rounded-full bg-black/5 px-4 py-2 text-sm"
       >
         ← Volver
       </button>
 
-      <div className="rounded-3xl border border-black/5 bg-white shadow-sm overflow-hidden">
-        {/* Header / imagen */}
-        <div className="relative h-56 md:h-80 bg-black/5">
+      <div className="rounded-3xl bg-white overflow-hidden">
+        <div className="relative h-64 bg-black/5">
           {coverUrl ? (
-            <Image src={coverUrl} alt={project.name} fill priority style={{ objectFit: 'cover' }} />
+            <Image src={coverUrl} alt={project.name} fill style={{ objectFit: 'cover' }} />
           ) : (
-            <div className="h-full w-full flex items-center justify-center text-black/40">
-              Sin imagen
-            </div>
+            <div className="h-full flex items-center justify-center">Sin imagen</div>
           )}
         </div>
 
         <div className="p-6">
-          <h1 className="text-2xl md:text-3xl font-semibold">{project.name}</h1>
+          <h1 className="text-3xl font-semibold">{project.name}</h1>
 
-          <p className="mt-3 text-black/70 leading-relaxed">
-            {project.description || project.short_description || ''}
-          </p>
+          <p className="mt-3 text-black/70">{project.description}</p>
 
-          <div className="mt-5 text-base font-medium">
-            Precio: <span className="font-semibold">${displayPrice}</span> / tCO₂
+          <div className="mt-5 text-lg">
+            Precio: <strong>${displayPrice}</strong> / tCO₂
           </div>
 
-          <div className="mt-6 flex flex-col gap-3 max-w-sm">
-            <div className="inline-flex items-center justify-between rounded-2xl border border-black/10 bg-white px-3 py-2">
-              <button
-                type="button"
-                onClick={dec}
-                className="h-10 w-10 rounded-xl bg-black/5 hover:bg-black/10 text-lg"
-              >
-                −
-              </button>
+          <div className="mt-6 flex gap-3 items-center">
+            <button onClick={() => setQuantity(Math.max(1, quantity - 1))}>−</button>
+            <span>{quantity}</span>
+            <button onClick={() => setQuantity(quantity + 1)}>+</button>
+          </div>
 
-              <div className="min-w-16 text-center">
-                <div className="text-xs text-black/50">Cantidad</div>
-                <div className="text-lg font-semibold">{quantity}</div>
-              </div>
-
-              <button
-                type="button"
-                onClick={inc}
-                className="h-10 w-10 rounded-xl bg-black/5 hover:bg-black/10 text-lg"
-              >
-                +
-              </button>
-            </div>
-
-            <Button variant="quaternary" isDisabled={!canBuy} onClick={onBuy}>
+          <div className="mt-4">
+            <Button isDisabled={!canBuy} onClick={onBuy}>
               {isPricesLoading ? 'Cargando precios...' : 'Comprar / Retirar'}
             </Button>
           </div>
-
-          {/* ✅ MAPA (solo cliente) */}
-          {mapCoords && (
-            <div className="mt-8">
-              <div className="text-lg font-semibold mb-3">Ubicación</div>
-
-              <div className="h-80 rounded-2xl overflow-hidden border border-black/5">
-                <MapView
-                  projectLocations={[
-                    {
-                      coordinates: mapCoords,
-                      name: project.name,
-                    },
-                  ]}
-                  customIcon={customIcon}
-                />
-              </div>
-            </div>
-          )}
-
-          {project.long_description && (
-            <div className="mt-8">
-              <div className="text-lg font-semibold mb-2">Descripción</div>
-              <p className="text-black/70 leading-relaxed whitespace-pre-line">
-                {project.long_description}
-              </p>
-            </div>
-          )}
         </div>
       </div>
     </div>
