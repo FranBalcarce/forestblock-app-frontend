@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import useMarketplace from '@/hooks/useMarketplace';
 import ProjectInfo from '@/components/ProjectInfo/ProjectInfo';
 
@@ -11,7 +11,6 @@ type Props = {
 };
 
 export default function MarketplaceByIdClient({ id, priceParam }: Props) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const selectedVintage = searchParams.get('selectedVintage') ?? '';
 
