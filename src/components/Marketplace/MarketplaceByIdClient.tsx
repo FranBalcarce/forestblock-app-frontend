@@ -1,17 +1,21 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import useMarketplace from '@/hooks/useMarketplace';
 import ProjectInfo from '@/components/ProjectInfo/ProjectInfo';
-import LoaderScreenDynamic from '@/components/LoaderScreen/LoaderScreenDynamic';
 
 type Props = {
   id: string;
-  priceParam: string | null;
+  priceParam?: string | null; // ✅ ahora opcional
 };
 
-const MarketplaceByIdClient: React.FC<Props> = ({ id, priceParam }) => {
-  const { project, prices, isPricesLoading, loading } = useMarketplace(id);
+export default function MarketplaceByIdClient({ id, priceParam }: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectedVintage = searchParams.get('selectedVintage') ?? '';
+
+  const { project, prices, isPricesLoading, handleRetire } = useMarketplace(id);
 
   const matches = useMemo(() => {
     if (!project) return [];
@@ -20,25 +24,28 @@ const MarketplaceByIdClient: React.FC<Props> = ({ id, priceParam }) => {
         p.listing?.creditId?.projectId === project.key ||
         p.carbonPool?.creditId?.projectId === project.key
     );
-  }, [project, prices]);
+  }, [prices, project]);
 
-  if (loading || !project) return <LoaderScreenDynamic />;
+  const displayPrice = useMemo(() => {
+    if (!matches.length) return '—';
+    const raw = matches[0].purchasePrice ?? matches[0].baseUnitPrice ?? 0;
+    return Number(raw).toFixed(2);
+  }, [matches]);
+
+  if (!project) return null;
 
   return (
     <ProjectInfo
       project={project}
       matches={matches}
-      selectedVintage={project.selectedVintage ?? ''}
-      priceParam={priceParam}
+      displayPrice={displayPrice}
+      selectedVintage={selectedVintage}
+      priceParam={priceParam ?? null}
+      handleRetire={handleRetire}
       isPricesLoading={isPricesLoading}
-      handleRetire={({ id, index, priceParam, selectedVintage, quantity }) => {
-        window.location.href = `/retireCheckout?projectIds=${id}&index=${index}&priceParam=${priceParam}&selectedVintage=${selectedVintage}&quantity=${quantity}`;
-      }}
     />
   );
-};
-
-export default MarketplaceByIdClient;
+}
 
 // 'use client';
 

@@ -4,112 +4,205 @@ import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
+import MapView from './MapView';
 import Button from '@/components/Marketplace/Button';
+
 import type { Project } from '@/types/project';
 import type { Price, RetireParams } from '@/types/marketplace';
 
+/* ---------------------------------------------
+   Helpers
+--------------------------------------------- */
+
+// Convierte cualquier formato raro de imagen en string usable
 const getImageUrl = (img: unknown): string | null => {
   if (!img) return null;
+
   if (typeof img === 'string') return img;
 
   if (Array.isArray(img)) {
     for (const item of img) {
-      const u = getImageUrl(item);
-      if (u) return u;
+      const url = getImageUrl(item);
+      if (url) return url;
     }
+    return null;
   }
 
   if (typeof img === 'object') {
     const o = img as Record<string, unknown>;
-    if (typeof o.url === 'string') return o.url;
-    if (typeof o.src === 'string') return o.src;
+    const direct = o.url ?? o.src ?? o.imageUrl;
+    if (typeof direct === 'string') return direct;
   }
 
   return null;
 };
 
+/* ---------------------------------------------
+   Props
+--------------------------------------------- */
+
 type Props = {
   project: Project;
-  handleRetire: (params: RetireParams) => void;
   matches: Price[];
+  displayPrice: string;
   selectedVintage: string;
   priceParam: string | null;
   isPricesLoading: boolean;
+  handleRetire: (params: RetireParams) => void;
 };
+
+/* ---------------------------------------------
+   Component
+--------------------------------------------- */
 
 export default function ProjectInfo({
   project,
-  handleRetire,
   matches,
+  displayPrice,
   selectedVintage,
   priceParam,
   isPricesLoading,
+  handleRetire,
 }: Props) {
   const router = useRouter();
   const [quantity, setQuantity] = useState(1);
 
-  const coverUrl = useMemo(
-    () => getImageUrl(project.coverImage) || getImageUrl(project.images?.[0]) || null,
-    [project]
-  );
+  /* ---------- Imagen principal ---------- */
+  const coverUrl = useMemo(() => {
+    return (
+      getImageUrl(project.coverImage) ||
+      getImageUrl(project.images?.[0]) ||
+      getImageUrl(project.images) ||
+      null
+    );
+  }, [project]);
 
-  const displayPrice = useMemo(() => {
-    if (!matches.length) return '—';
-    const p = matches[0].purchasePrice ?? matches[0].baseUnitPrice;
-    return typeof p === 'number' ? p.toFixed(2) : '—';
-  }, [matches]);
+  /* ---------- Coordenadas mapa ---------- */
+  const mapCoords = useMemo<[number, number] | null>(() => {
+    const coords = project.location?.geometry?.coordinates;
+    if (!coords || coords.length < 2) return null;
 
+    const lng = Number(coords[0]);
+    const lat = Number(coords[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+    return [lat, lng];
+  }, [project]);
+
+  /* ---------- Estado compra ---------- */
   const canBuy = !isPricesLoading && matches.length > 0;
 
   const onBuy = () => {
     const first = matches[0];
+
+    const effectivePrice =
+      priceParam ?? (first?.purchasePrice != null ? String(first.purchasePrice) : '');
+
     handleRetire({
       id: project.key,
       index: 0,
-      priceParam: priceParam ?? String(first.purchasePrice),
+      priceParam: effectivePrice,
       selectedVintage,
       quantity,
     });
   };
 
+  const dec = () => setQuantity((q) => Math.max(1, q - 1));
+  const inc = () => setQuantity((q) => q + 1);
+
+  /* --------------------------------------------- */
+
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-6">
+    <div className="w-full max-w-6xl mx-auto px-4 py-6 md:py-10">
       <button
         onClick={() => router.back()}
-        className="mb-4 rounded-full bg-black/5 px-4 py-2 text-sm"
+        className="mb-4 rounded-full bg-black/5 px-4 py-2 text-sm hover:bg-black/10"
       >
         ← Volver
       </button>
 
-      <div className="rounded-3xl bg-white overflow-hidden">
-        <div className="relative h-64 bg-black/5">
+      <div className="rounded-3xl border border-black/5 bg-white shadow-sm overflow-hidden">
+        {/* Imagen */}
+        <div className="relative h-56 md:h-80 bg-black/5">
           {coverUrl ? (
-            <Image src={coverUrl} alt={project.name} fill style={{ objectFit: 'cover' }} />
+            <Image src={coverUrl} alt={project.name} fill priority style={{ objectFit: 'cover' }} />
           ) : (
             <div className="h-full flex items-center justify-center text-black/40">Sin imagen</div>
           )}
         </div>
 
         <div className="p-6">
-          <h1 className="text-3xl font-semibold">{project.name}</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold">{project.name}</h1>
 
-          <p className="mt-3 text-black/70">{project.description}</p>
+          <p className="mt-3 text-black/70 leading-relaxed">
+            {project.description || project.short_description || ''}
+          </p>
 
-          <div className="mt-5 text-lg">
-            Precio: <strong>${displayPrice}</strong> / tCO₂
+          {/* Precio */}
+          <div className="mt-5 text-base font-medium">
+            Precio:{' '}
+            <span className="font-semibold">
+              {displayPrice !== 'NaN' ? `$${displayPrice}` : '—'}
+            </span>{' '}
+            / tCO₂
           </div>
 
-          <div className="mt-6 flex gap-3 items-center">
-            <button onClick={() => setQuantity(Math.max(1, quantity - 1))}>−</button>
-            <span>{quantity}</span>
-            <button onClick={() => setQuantity(quantity + 1)}>+</button>
-          </div>
+          {/* Cantidad + botón */}
+          <div className="mt-6 flex flex-col gap-3 max-w-sm">
+            <div className="inline-flex items-center justify-between rounded-2xl border border-black/10 bg-white px-3 py-2">
+              <button
+                type="button"
+                onClick={dec}
+                className="h-10 w-10 rounded-xl bg-black/5 hover:bg-black/10 text-lg"
+              >
+                −
+              </button>
 
-          <div className="mt-4">
-            <Button isDisabled={!canBuy} onClick={onBuy}>
+              <div className="min-w-16 text-center">
+                <div className="text-xs text-black/50">Cantidad</div>
+                <div className="text-lg font-semibold">{quantity}</div>
+              </div>
+
+              <button
+                type="button"
+                onClick={inc}
+                className="h-10 w-10 rounded-xl bg-black/5 hover:bg-black/10 text-lg"
+              >
+                +
+              </button>
+            </div>
+
+            <Button variant="quaternary" isDisabled={!canBuy} onClick={onBuy}>
               {isPricesLoading ? 'Cargando precios...' : 'Comprar / Retirar'}
             </Button>
           </div>
+
+          {/* Mapa */}
+          {mapCoords && (
+            <div className="mt-8">
+              <div className="text-lg font-semibold mb-3">Ubicación</div>
+              <div className="h-80 rounded-2xl overflow-hidden border border-black/5">
+                <MapView
+                  projectLocations={[
+                    {
+                      coordinates: mapCoords,
+                      name: project.name,
+                    },
+                  ]}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Descripción larga */}
+          {project.long_description && (
+            <div className="mt-8">
+              <div className="text-lg font-semibold mb-2">Descripción</div>
+              <p className="text-black/70 leading-relaxed whitespace-pre-line">
+                {project.long_description}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
