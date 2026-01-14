@@ -4,42 +4,48 @@ import { useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import useMarketplace from '@/hooks/useMarketplace';
 import ProjectInfo from '@/components/ProjectInfo/ProjectInfo';
+import type { Price } from '@/types/marketplace';
 
 type Props = {
   id: string;
-  priceParam?: string | null; // ✅ ahora opcional
 };
 
-export default function MarketplaceByIdClient({ id, priceParam }: Props) {
+export default function MarketplaceByIdClient({ id }: Props) {
   const searchParams = useSearchParams();
   const selectedVintage = searchParams.get('selectedVintage') ?? '';
 
   const { project, prices, isPricesLoading, handleRetire } = useMarketplace(id);
 
-  const matches = useMemo(() => {
+  // ✅ SOLO listings válidos de Carbonmark
+  const listings: Price[] = useMemo(() => {
     if (!project) return [];
+
     return prices.filter(
       (p) =>
-        p.listing?.creditId?.projectId === project.key ||
-        p.carbonPool?.creditId?.projectId === project.key
+        p.type === 'listing' &&
+        typeof p.purchasePrice === 'number' &&
+        (p.listing?.creditId?.projectId === project.key ||
+          p.carbonPool?.creditId?.projectId === project.key)
     );
   }, [prices, project]);
 
+  // ✅ Precio real (Carbonmark)
   const displayPrice = useMemo(() => {
-    if (!matches.length) return '—';
-    const raw = matches[0].purchasePrice ?? matches[0].baseUnitPrice ?? 0;
-    return Number(raw).toFixed(2);
-  }, [matches]);
+    if (!listings.length) return '—';
+
+    const min = Math.min(...listings.map((l) => l.purchasePrice!));
+    return min.toFixed(2);
+  }, [listings]);
 
   if (!project) return null;
 
   return (
     <ProjectInfo
       project={project}
-      matches={matches}
+      matches={listings}
       displayPrice={displayPrice}
       selectedVintage={selectedVintage}
-      priceParam={priceParam ?? null}
+      priceParam={displayPrice !== '—' ? displayPrice : null}
       handleRetire={handleRetire}
       isPricesLoading={isPricesLoading}
     />
