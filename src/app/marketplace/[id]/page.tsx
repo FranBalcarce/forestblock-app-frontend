@@ -1,16 +1,18 @@
 import { Suspense } from 'react';
 import MarketplaceByIdClient from '@/components/Marketplace/MarketplaceByIdClient';
 
-type Props = {
-  params: {
+type PageProps = {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
-export default function MarketplaceByIdPage({ params }: Props) {
+export default async function Page({ params }: PageProps) {
+  const { id } = await params;
+
   return (
     <Suspense fallback={null}>
-      <MarketplaceByIdClient id={params.id} />
+      <MarketplaceByIdClient id={id} />
     </Suspense>
   );
 }
