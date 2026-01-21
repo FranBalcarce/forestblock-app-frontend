@@ -34,27 +34,34 @@ export default function useMarketplace(id?: string): UseMarketplace {
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
-  /* ---------------- PRICES (SOLO CON STOCK) ---------------- */
+  /* ---------------- PRICES ---------------- */
   useEffect(() => {
     const fetchPrices = async () => {
       try {
         setIsPricesLoading(true);
 
-        const res = await axiosPublicInstance.get(ENDPOINTS.prices, {
-          params: { minSupply: 1 },
-        });
+        const res = await axiosPublicInstance.get(ENDPOINTS.prices);
 
-        const all = unwrapArray<Price>(res.data);
+        const raw = unwrapArray<any>(res.data);
 
-        const valid = all.filter(
-          (p) =>
-            p.type === 'listing' &&
-            typeof p.purchasePrice === 'number' &&
-            p.supply > 0 &&
-            !!p.listing?.creditId?.projectId
+        const adapted = raw.map((item: any) => ({
+          type: 'listing',
+          supply: item.supply ?? 0,
+          purchasePrice: item.price,
+          listing: {
+            creditId: {
+              projectId: item.projectId,
+              vintage: item.vintage,
+            },
+          },
+        }));
+
+        const valid = adapted.filter(
+          (p: any) =>
+            typeof p.purchasePrice === 'number' && p.supply > 0 && !!p.listing?.creditId?.projectId
         );
 
-        setPrices(valid);
+        setPrices(valid as Price[]);
       } catch (e) {
         console.error('Error fetching prices', e);
         setPrices([]);
@@ -75,7 +82,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
         const allProjects = unwrapArray<Project>(res.data);
 
-        // ⛔ SOLO proyectos con listings activos
+        // 🔑 solo proyectos con listings activos
         const projectIdsWithStock = new Set(prices.map((p) => p.listing!.creditId!.projectId));
 
         const marketProjects = allProjects.filter((p) => projectIdsWithStock.has(p.key));
