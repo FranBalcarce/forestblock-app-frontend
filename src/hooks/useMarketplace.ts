@@ -76,8 +76,13 @@ export default function useMarketplace(id?: string): UseMarketplace {
 
         const valid = adapted.filter(
           (p) =>
-            typeof p.purchasePrice === 'number' && p.supply > 0 && !!p.listing?.creditId?.projectId
+            p.type === 'listing' &&
+            typeof p.purchasePrice === 'number' &&
+            p.supply > 0 &&
+            !!p.listing?.creditId?.projectId
         );
+
+        setPrices(valid as Price[]);
 
         setPrices(adapted as Price[]);
       } catch (e) {
