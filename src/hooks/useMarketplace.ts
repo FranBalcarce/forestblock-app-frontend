@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Project } from '@/types/project';
-import type { Price, UseMarketplace, SortBy } from '@/types/marketplace';
+import type { Price, UseMarketplace, SortBy, RetireParams } from '@/types/marketplace';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
 const ENDPOINTS = {
@@ -18,16 +18,7 @@ function unwrapArray<T>(payload: unknown): T[] {
   return [];
 }
 
-function normalizeProject(p: Project): Project {
-  return {
-    ...p,
-    images: p.images ?? [],
-    description: p.short_description || p.description || 'No description available',
-    selectedVintage: p.vintages?.[0],
-  };
-}
-
-const useMarketplace = (id?: string): UseMarketplace => {
+export default function useMarketplace(id?: string): UseMarketplace {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [prices, setPrices] = useState<Price[]>([]);
@@ -43,47 +34,29 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
-  // 🔹 PROYECTOS
-  useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        setLoading(true);
-        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
-        const list = unwrapArray<Project>(res.data).map(normalizeProject);
-        setProjects(list);
-
-        if (id) {
-          setProject(list.find((p) => p.key === id) ?? null);
-        } else {
-          setProject(null);
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProjects();
-  }, [id]);
-
-  // 🔹 PRECIOS (🔥 CLAVE: minSupply + projectIds)
+  /* ---------------- PRICES (SOLO CON STOCK) ---------------- */
   useEffect(() => {
     const fetchPrices = async () => {
       try {
         setIsPricesLoading(true);
 
-        if (!id) {
-          setPrices([]);
-          return;
-        }
-
-        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices, {
-          params: {
-            projectIds: id,
-            minSupply: 1,
-          },
+        const res = await axiosPublicInstance.get(ENDPOINTS.prices, {
+          params: { minSupply: 1 },
         });
 
-        setPrices(unwrapArray<Price>(res.data));
-      } catch {
+        const all = unwrapArray<Price>(res.data);
+
+        const valid = all.filter(
+          (p) =>
+            p.type === 'listing' &&
+            typeof p.purchasePrice === 'number' &&
+            p.supply > 0 &&
+            !!p.listing?.creditId?.projectId
+        );
+
+        setPrices(valid);
+      } catch (e) {
+        console.error('Error fetching prices', e);
         setPrices([]);
       } finally {
         setIsPricesLoading(false);
@@ -91,8 +64,42 @@ const useMarketplace = (id?: string): UseMarketplace => {
     };
 
     fetchPrices();
-  }, [id]);
+  }, []);
 
+  /* ---------------- PROJECTS ---------------- */
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        setLoading(true);
+
+        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
+        const allProjects = unwrapArray<Project>(res.data);
+
+        // ⛔ SOLO proyectos con listings activos
+        const projectIdsWithStock = new Set(prices.map((p) => p.listing!.creditId!.projectId));
+
+        const marketProjects = allProjects.filter((p) => projectIdsWithStock.has(p.key));
+
+        setProjects(marketProjects);
+
+        if (id) {
+          setProject(marketProjects.find((p) => p.key === id) ?? null);
+        } else {
+          setProject(null);
+        }
+      } catch (e) {
+        console.error('Error fetching projects', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (!isPricesLoading) {
+      fetchProjects();
+    }
+  }, [id, prices, isPricesLoading]);
+
+  /* ---------------- FILTER + SORT ---------------- */
   const filteredProjects = useMemo(() => {
     let list = [...projects];
 
@@ -101,12 +108,42 @@ const useMarketplace = (id?: string): UseMarketplace => {
       list = list.filter((p) => p.name?.toLowerCase().includes(s));
     }
 
+    if (sortBy === 'price_asc') {
+      list.sort((a, b) => {
+        const pa =
+          prices.find((p) => p.listing?.creditId?.projectId === a.key)?.purchasePrice ?? Infinity;
+        const pb =
+          prices.find((p) => p.listing?.creditId?.projectId === b.key)?.purchasePrice ?? Infinity;
+        return pa - pb;
+      });
+    }
+
+    if (sortBy === 'price_desc') {
+      list.sort((a, b) => {
+        const pa = prices.find((p) => p.listing?.creditId?.projectId === a.key)?.purchasePrice ?? 0;
+        const pb = prices.find((p) => p.listing?.creditId?.projectId === b.key)?.purchasePrice ?? 0;
+        return pb - pa;
+      });
+    }
+
     return list;
-  }, [projects, searchTerm]);
+  }, [projects, prices, searchTerm, sortBy]);
+
+  /* ---------------- RETIRE ---------------- */
+  const handleRetire = (params: RetireParams) => {
+    const sp = new URLSearchParams();
+    sp.set('index', String(params.index));
+    sp.set('price', params.priceParam);
+    sp.set('selectedVintage', params.selectedVintage);
+    sp.set('quantity', String(params.quantity));
+
+    window.location.href = `/retireCheckout?${sp.toString()}`;
+  };
 
   return {
     filteredProjects,
     loading,
+
     availableCategories: [],
     selectedCountries,
     setSelectedCountries,
@@ -120,15 +157,15 @@ const useMarketplace = (id?: string): UseMarketplace => {
     setSearchTerm,
     sortBy,
     setSortBy,
+
     projects,
     project,
     prices,
     isPricesLoading,
-    handleRetire: () => {},
-  };
-};
 
-export default useMarketplace;
+    handleRetire,
+  };
+}
 
 // import { useEffect, useState } from "react";
 // import { Price, RetireParams, UseMarketplace } from "@/types/marketplace";

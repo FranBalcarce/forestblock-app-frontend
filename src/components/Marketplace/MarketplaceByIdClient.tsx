@@ -12,33 +12,28 @@ type Props = {
 export default function MarketplaceByIdClient({ id }: Props) {
   const { project, prices, isPricesLoading, handleRetire } = useMarketplace(id);
 
-  // ✅ SIEMPRE se ejecuta
-  const listings = useMemo<Price[]>(() => {
-    return prices.filter(
-      (p) => p.type === 'listing' && typeof p.purchasePrice === 'number' && p.supply > 0
-    );
-  }, [prices]);
+  const listings: Price[] = useMemo(() => {
+    if (!project) return [];
 
-  // ✅ SIEMPRE se ejecuta
-  const displayPrice = useMemo<string>(() => {
+    return prices.filter(
+      (p) => p.type === 'listing' && p.supply > 0 && p.listing?.creditId?.projectId === project.key
+    );
+  }, [prices, project]);
+
+  const displayPrice = useMemo(() => {
     if (!listings.length) return '—';
     return Math.min(...listings.map((l) => l.purchasePrice)).toFixed(2);
   }, [listings]);
 
-  // ⛔ Render condicional DESPUÉS de los hooks
-  if (!project) {
-    return (
-      <div className="flex items-center justify-center h-96 text-black/50">Cargando proyecto…</div>
-    );
-  }
+  if (!project) return null;
 
   return (
     <ProjectInfo
       project={project}
       matches={listings}
       displayPrice={displayPrice}
-      selectedVintage={project.selectedVintage ?? ''}
-      priceParam={null}
+      selectedVintage=""
+      priceParam={displayPrice !== '—' ? displayPrice : null}
       handleRetire={handleRetire}
       isPricesLoading={isPricesLoading}
     />

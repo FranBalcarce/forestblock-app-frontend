@@ -140,7 +140,10 @@ export default function ProjectInfo({
 
           {/* Precio */}
           <div className="mt-5 text-base font-medium">
-            Precio: <span className="font-semibold">{displayPrice ? `$${displayPrice}` : '—'}</span>{' '}
+            Precio:{' '}
+            <span className="font-semibold">
+              {displayPrice !== '—' ? `$${displayPrice}` : 'No disponible'}
+            </span>{' '}
             / tCO₂
           </div>
 
