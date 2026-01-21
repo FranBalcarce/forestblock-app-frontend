@@ -8,6 +8,17 @@ const ENDPOINTS = {
   prices: '/api/carbon/prices',
 };
 
+/* =====================
+   TYPES
+===================== */
+
+type BackendPrice = {
+  projectId: string;
+  vintage?: number;
+  price: number;
+  supply: number;
+};
+
 type UnknownRecord = Record<string, unknown>;
 const isRecord = (v: unknown): v is UnknownRecord => typeof v === 'object' && v !== null;
 
@@ -17,6 +28,10 @@ function unwrapArray<T>(payload: unknown): T[] {
   if (isRecord(payload) && Array.isArray(payload.data)) return payload.data as T[];
   return [];
 }
+
+/* =====================
+   HOOK
+===================== */
 
 export default function useMarketplace(id?: string): UseMarketplace {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -34,34 +49,37 @@ export default function useMarketplace(id?: string): UseMarketplace {
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
-  /* ---------------- PRICES ---------------- */
+  /* =====================
+     PRICES
+  ===================== */
+
   useEffect(() => {
     const fetchPrices = async () => {
       try {
         setIsPricesLoading(true);
 
         const res = await axiosPublicInstance.get(ENDPOINTS.prices);
+        const raw = unwrapArray<BackendPrice>(res.data);
 
-        const raw = unwrapArray<any>(res.data);
-
-        const adapted = raw.map((item: any) => ({
+        const adapted = raw.map((item) => ({
           type: 'listing',
           supply: item.supply ?? 0,
           purchasePrice: item.price,
           listing: {
             creditId: {
               projectId: item.projectId,
-              vintage: item.vintage,
+              vintage: item.vintage ?? 0,
+              standard: 'VCS',
             },
           },
         }));
 
         const valid = adapted.filter(
-          (p: any) =>
+          (p) =>
             typeof p.purchasePrice === 'number' && p.supply > 0 && !!p.listing?.creditId?.projectId
         );
 
-        setPrices(valid as Price[]);
+        setPrices(adapted as Price[]);
       } catch (e) {
         console.error('Error fetching prices', e);
         setPrices([]);
@@ -73,7 +91,10 @@ export default function useMarketplace(id?: string): UseMarketplace {
     fetchPrices();
   }, []);
 
-  /* ---------------- PROJECTS ---------------- */
+  /* =====================
+     PROJECTS
+  ===================== */
+
   useEffect(() => {
     const fetchProjects = async () => {
       try {
@@ -82,8 +103,12 @@ export default function useMarketplace(id?: string): UseMarketplace {
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
         const allProjects = unwrapArray<Project>(res.data);
 
-        // 🔑 solo proyectos con listings activos
-        const projectIdsWithStock = new Set(prices.map((p) => p.listing!.creditId!.projectId));
+        // solo proyectos con stock
+        const projectIdsWithStock = new Set(
+          prices
+            .map((p) => p.listing?.creditId?.projectId)
+            .filter((id): id is string => Boolean(id))
+        );
 
         const marketProjects = allProjects.filter((p) => projectIdsWithStock.has(p.key));
 
@@ -106,7 +131,10 @@ export default function useMarketplace(id?: string): UseMarketplace {
     }
   }, [id, prices, isPricesLoading]);
 
-  /* ---------------- FILTER + SORT ---------------- */
+  /* =====================
+     FILTER + SORT
+  ===================== */
+
   const filteredProjects = useMemo(() => {
     let list = [...projects];
 
@@ -136,7 +164,10 @@ export default function useMarketplace(id?: string): UseMarketplace {
     return list;
   }, [projects, prices, searchTerm, sortBy]);
 
-  /* ---------------- RETIRE ---------------- */
+  /* =====================
+     RETIRE
+  ===================== */
+
   const handleRetire = (params: RetireParams) => {
     const sp = new URLSearchParams();
     sp.set('index', String(params.index));
