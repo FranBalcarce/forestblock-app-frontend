@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useSearchParams } from 'next/navigation';
 import useMarketplace from '@/hooks/useMarketplace';
 import ProjectInfo from '@/components/ProjectInfo/ProjectInfo';
 import type { Price } from '@/types/marketplace';
@@ -11,41 +10,35 @@ type Props = {
 };
 
 export default function MarketplaceByIdClient({ id }: Props) {
-  const searchParams = useSearchParams();
-  const selectedVintage = searchParams.get('selectedVintage') ?? '';
-
   const { project, prices, isPricesLoading, handleRetire } = useMarketplace(id);
 
-  // ✅ SOLO listings válidos de Carbonmark
-  const listings: Price[] = useMemo(() => {
-    if (!project) return [];
-
+  // ✅ SIEMPRE se ejecuta
+  const listings = useMemo<Price[]>(() => {
     return prices.filter(
-      (p) =>
-        p.type === 'listing' &&
-        typeof p.purchasePrice === 'number' &&
-        (p.listing?.creditId?.projectId === project.key ||
-          p.carbonPool?.creditId?.projectId === project.key)
+      (p) => p.type === 'listing' && typeof p.purchasePrice === 'number' && p.supply > 0
     );
-  }, [prices, project]);
+  }, [prices]);
 
-  // ✅ Precio real (Carbonmark)
-  const displayPrice = useMemo(() => {
+  // ✅ SIEMPRE se ejecuta
+  const displayPrice = useMemo<string>(() => {
     if (!listings.length) return '—';
-
-    const min = Math.min(...listings.map((l) => l.purchasePrice!));
-    return min.toFixed(2);
+    return Math.min(...listings.map((l) => l.purchasePrice)).toFixed(2);
   }, [listings]);
 
-  if (!project) return null;
+  // ⛔ Render condicional DESPUÉS de los hooks
+  if (!project) {
+    return (
+      <div className="flex items-center justify-center h-96 text-black/50">Cargando proyecto…</div>
+    );
+  }
 
   return (
     <ProjectInfo
       project={project}
       matches={listings}
       displayPrice={displayPrice}
-      selectedVintage={selectedVintage}
-      priceParam={displayPrice !== '—' ? displayPrice : null}
+      selectedVintage={project.selectedVintage ?? ''}
+      priceParam={null}
       handleRetire={handleRetire}
       isPricesLoading={isPricesLoading}
     />

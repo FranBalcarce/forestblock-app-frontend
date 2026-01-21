@@ -18,26 +18,6 @@ function unwrapArray<T>(payload: unknown): T[] {
   return [];
 }
 
-function getProjectKeyFromPrice(p: Price): string | undefined {
-  return p.listing?.creditId?.projectId ?? p.carbonPool?.creditId?.projectId;
-}
-
-export function computeMinRawPriceForProject(projectKey: string, prices: Price[]): number | null {
-  const filtered = prices.filter((p) => getProjectKeyFromPrice(p) === projectKey);
-
-  if (!filtered.length) return null;
-
-  let min: number | null = null;
-
-  for (const pr of filtered) {
-    const val = pr.purchasePrice ?? pr.baseUnitPrice;
-    if (typeof val !== 'number' || !Number.isFinite(val)) continue;
-    if (min === null || val < min) min = val;
-  }
-
-  return min;
-}
-
 function normalizeProject(p: Project): Project {
   return {
     ...p,
@@ -63,22 +43,6 @@ const useMarketplace = (id?: string): UseMarketplace => {
   const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
-  // 🔹 PRECIOS
-  useEffect(() => {
-    const fetchPrices = async () => {
-      try {
-        setIsPricesLoading(true);
-        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices);
-        setPrices(unwrapArray<Price>(res.data));
-      } catch {
-        setPrices([]);
-      } finally {
-        setIsPricesLoading(false);
-      }
-    };
-    fetchPrices();
-  }, []);
-
   // 🔹 PROYECTOS
   useEffect(() => {
     const fetchProjects = async () => {
@@ -100,6 +64,35 @@ const useMarketplace = (id?: string): UseMarketplace => {
     fetchProjects();
   }, [id]);
 
+  // 🔹 PRECIOS (🔥 CLAVE: minSupply + projectIds)
+  useEffect(() => {
+    const fetchPrices = async () => {
+      try {
+        setIsPricesLoading(true);
+
+        if (!id) {
+          setPrices([]);
+          return;
+        }
+
+        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices, {
+          params: {
+            projectIds: id,
+            minSupply: 1,
+          },
+        });
+
+        setPrices(unwrapArray<Price>(res.data));
+      } catch {
+        setPrices([]);
+      } finally {
+        setIsPricesLoading(false);
+      }
+    };
+
+    fetchPrices();
+  }, [id]);
+
   const filteredProjects = useMemo(() => {
     let list = [...projects];
 
@@ -108,24 +101,8 @@ const useMarketplace = (id?: string): UseMarketplace => {
       list = list.filter((p) => p.name?.toLowerCase().includes(s));
     }
 
-    if (sortBy === 'price_asc') {
-      list.sort(
-        (a, b) =>
-          (computeMinRawPriceForProject(a.key, prices) ?? Infinity) -
-          (computeMinRawPriceForProject(b.key, prices) ?? Infinity)
-      );
-    }
-
-    if (sortBy === 'price_desc') {
-      list.sort(
-        (a, b) =>
-          (computeMinRawPriceForProject(b.key, prices) ?? 0) -
-          (computeMinRawPriceForProject(a.key, prices) ?? 0)
-      );
-    }
-
     return list;
-  }, [projects, prices, searchTerm, sortBy]);
+  }, [projects, searchTerm]);
 
   return {
     filteredProjects,
@@ -145,9 +122,9 @@ const useMarketplace = (id?: string): UseMarketplace => {
     setSortBy,
     projects,
     project,
-    handleRetire: () => {},
     prices,
     isPricesLoading,
+    handleRetire: () => {},
   };
 };
 

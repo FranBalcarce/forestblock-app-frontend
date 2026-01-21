@@ -44,7 +44,7 @@ const getImageUrl = (img: unknown): string | null => {
 type Props = {
   project: Project;
   matches: Price[];
-  displayPrice: string;
+  displayPrice: string | null;
   selectedVintage: string;
   priceParam: string | null;
   isPricesLoading: boolean;
@@ -140,10 +140,7 @@ export default function ProjectInfo({
 
           {/* Precio */}
           <div className="mt-5 text-base font-medium">
-            Precio:{' '}
-            <span className="font-semibold">
-              {displayPrice !== 'NaN' ? `$${displayPrice}` : '—'}
-            </span>{' '}
+            Precio: <span className="font-semibold">{displayPrice ? `$${displayPrice}` : '—'}</span>{' '}
             / tCO₂
           </div>
 

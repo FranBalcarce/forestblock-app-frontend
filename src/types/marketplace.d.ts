@@ -3,8 +3,9 @@ import type { Project } from './project';
 export type SortBy = 'price_asc' | 'price_desc' | 'recently_updated' | 'newest' | 'oldest' | 'name';
 
 export interface ListingCreditId {
+  standard: string; // 👈 CLAVE (VCS, GS, etc)
+  projectId: string; // ej: "191"
   vintage: number;
-  projectId: string;
 }
 
 export interface ListingToken {
