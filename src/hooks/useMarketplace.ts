@@ -115,7 +115,8 @@ export default function useMarketplace(id?: string): UseMarketplace {
             .filter((id): id is string => Boolean(id))
         );
 
-        const marketProjects = allProjects.filter((p) => projectIdsWithStock.has(p.key));
+        // const marketProjects = allProjects.filter((p) => projectIdsWithStock.has(p.key));
+        const marketProjects = allProjects;
 
         setProjects(marketProjects);
 
