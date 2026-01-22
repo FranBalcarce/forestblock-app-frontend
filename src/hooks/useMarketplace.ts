@@ -22,10 +22,10 @@ function unwrapArray<T>(payload: unknown): T[] {
   return [];
 }
 
-/**
- * Estructura mínima esperada desde tu backend /api/carbon/prices
- * (ajustá si tu backend devuelve otro shape)
- */
+/* =====================
+   BACKEND TYPES
+===================== */
+
 type BackendPrice = {
   price: number;
   supply: number;
@@ -36,22 +36,34 @@ type BackendPrice = {
   };
 };
 
-/**
- * Type guard que TS sí entiende:
- * después de .filter(isListingPrice), p.listing.creditId.projectId existe.
- */
+/* =====================
+   TYPE GUARD (SIN any)
+===================== */
+
+type ListingPriceShape = {
+  type: 'listing';
+  supply: number;
+  purchasePrice: number;
+  listing?: {
+    creditId?: {
+      projectId?: string;
+    };
+  };
+};
+
 function isListingPrice(p: Price): p is Price & {
   supply: number;
   purchasePrice: number;
   listing: { creditId: { projectId: string } };
 } {
-  const anyP = p as any;
+  const lp = p as unknown as ListingPriceShape;
+
   return (
-    anyP?.type === 'listing' &&
-    typeof anyP?.purchasePrice === 'number' &&
-    typeof anyP?.supply === 'number' &&
-    typeof anyP?.listing?.creditId?.projectId === 'string' &&
-    anyP.listing.creditId.projectId.length > 0
+    lp.type === 'listing' &&
+    typeof lp.purchasePrice === 'number' &&
+    typeof lp.supply === 'number' &&
+    typeof lp.listing?.creditId?.projectId === 'string' &&
+    lp.listing.creditId.projectId.length > 0
   );
 }
 
@@ -87,23 +99,24 @@ export default function useMarketplace(id?: string): UseMarketplace {
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices);
         const raw = unwrapArray<BackendPrice>(res.data);
 
-        // Solo listings con supply > 0 y con projectId válido
-        const adapted = raw
+        const adapted: Price[] = raw
           .filter(
-            (i): i is BackendPrice & { creditId: NonNullable<BackendPrice['creditId']> } =>
-              typeof i?.price === 'number' &&
-              typeof i?.supply === 'number' &&
+            (
+              i
+            ): i is BackendPrice & {
+              creditId: NonNullable<BackendPrice['creditId']>;
+            } =>
+              typeof i.price === 'number' &&
+              typeof i.supply === 'number' &&
               i.supply > 0 &&
-              !!i.creditId?.projectId
+              typeof i.creditId?.projectId === 'string'
           )
           .map((item) => {
-            const projectId = item.creditId.projectId!;
+            const projectId = item.creditId.projectId;
             const vintage = item.creditId.vintage ?? 0;
             const standard = item.creditId.standard ?? 'VCS';
 
-            // OJO: este shape lo usamos porque tu UI consume purchasePrice + listing.creditId.projectId
-            // Como tu type Price no matchea perfecto, casteamos controlado.
-            const mapped = {
+            return {
               type: 'listing',
               supply: item.supply,
               purchasePrice: item.price,
@@ -115,9 +128,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
                   standard,
                 },
               },
-            };
-
-            return mapped as unknown as Price;
+            } as Price;
           });
 
         setPrices(adapted);
@@ -146,7 +157,6 @@ export default function useMarketplace(id?: string): UseMarketplace {
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
         const allProjects = unwrapArray<Project>(res.data);
 
-        // set de projectIds que tienen listings con stock
         const projectIdsWithStock = new Set(listingPrices.map((p) => p.listing.creditId.projectId));
 
         const marketProjects = allProjects.filter((p) => projectIdsWithStock.has(p.key));
@@ -182,7 +192,6 @@ export default function useMarketplace(id?: string): UseMarketplace {
       list = list.filter((p) => p.name?.toLowerCase().includes(s));
     }
 
-    // armamos un map rápido projectId -> purchasePrice (el más barato si hay varios)
     const priceByProjectId = new Map<string, number>();
     for (const lp of listingPrices) {
       const pid = lp.listing.creditId.projectId;
@@ -229,7 +238,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
     filteredProjects,
     loading,
 
-    availableCategories: [] as string[], // <- evita el never[]
+    availableCategories: [],
     selectedCountries,
     setSelectedCountries,
     selectedCategories,
@@ -238,6 +247,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
     setSelectedVintages,
     selectedUNSDG,
     setSelectedUNSDG,
+
     searchTerm,
     setSearchTerm,
     sortBy,
