@@ -3,6 +3,10 @@ import type { Project } from '@/types/project';
 import type { Price, UseMarketplace, SortBy, RetireParams } from '@/types/marketplace';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
+/* =====================
+   ENDPOINTS
+===================== */
+
 const ENDPOINTS = {
   projects: '/api/carbon/carbonProjects',
   prices: '/api/carbon/prices',
@@ -20,6 +24,7 @@ type BackendPrice = {
 };
 
 type UnknownRecord = Record<string, unknown>;
+
 const isRecord = (v: unknown): v is UnknownRecord => typeof v === 'object' && v !== null;
 
 function unwrapArray<T>(payload: unknown): T[] {
@@ -61,28 +66,21 @@ export default function useMarketplace(id?: string): UseMarketplace {
         const res = await axiosPublicInstance.get(ENDPOINTS.prices);
         const raw = unwrapArray<BackendPrice>(res.data);
 
-        const adapted = raw.map((item) => ({
-          type: 'listing',
-          supply: item.supply ?? 0,
-          purchasePrice: item.price,
-          listing: {
-            creditId: {
-              projectId: item.projectId,
-              vintage: item.vintage ?? 0,
-              standard: 'VCS',
+        const adapted = raw
+          .filter((item) => item.supply > 0 && typeof item.price === 'number')
+          .map((item) => ({
+            type: 'listing' as const,
+            supply: item.supply,
+            purchasePrice: item.price,
+            listing: {
+              id: `listing-${item.projectId}-${item.vintage ?? 'any'}`, // 👈 IMPORTANTE
+              creditId: {
+                projectId: item.projectId,
+                vintage: item.vintage ?? 0,
+                standard: 'VCS' as const,
+              },
             },
-          },
-        }));
-
-        const valid = adapted.filter(
-          (p) =>
-            p.type === 'listing' &&
-            typeof p.purchasePrice === 'number' &&
-            p.supply > 0 &&
-            !!p.listing?.creditId?.projectId
-        );
-
-        setPrices(valid as Price[]);
+          }));
 
         setPrices(adapted as Price[]);
       } catch (e) {
@@ -108,9 +106,12 @@ export default function useMarketplace(id?: string): UseMarketplace {
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
         const allProjects = unwrapArray<Project>(res.data);
 
-        // const marketProjects = allProjects.filter((p) => projectIdsWithStock.has(p.key));
-        // ⛔ filtro desactivado temporalmente
-        const marketProjects = allProjects;
+        // 🔑 SOLO proyectos con stock
+        const projectIdsWithStock = new Set(
+          prices.map((p) => p.listing?.creditId?.projectId).filter(Boolean)
+        );
+
+        const marketProjects = allProjects.filter((p) => projectIdsWithStock.has(p.key));
 
         setProjects(marketProjects);
 
@@ -178,6 +179,10 @@ export default function useMarketplace(id?: string): UseMarketplace {
     window.location.href = `/retireCheckout?${sp.toString()}`;
   };
 
+  /* =====================
+     RETURN
+  ===================== */
+
   return {
     filteredProjects,
     loading,
@@ -191,6 +196,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
     setSelectedVintages,
     selectedUNSDG,
     setSelectedUNSDG,
+
     searchTerm,
     setSearchTerm,
     sortBy,
