@@ -3,28 +3,16 @@ import type { Project } from '@/types/project';
 import type { Price, UseMarketplace, SortBy, RetireParams } from '@/types/marketplace';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
-/* =====================
-   ENDPOINTS
-===================== */
-
 const ENDPOINTS = {
   projects: '/api/carbon/carbonProjects',
   prices: '/api/carbon/prices',
 };
 
 /* =====================
-   TYPES
+   HELPERS
 ===================== */
 
-type BackendPrice = {
-  projectId: string;
-  vintage?: number;
-  price: number;
-  supply: number;
-};
-
 type UnknownRecord = Record<string, unknown>;
-
 const isRecord = (v: unknown): v is UnknownRecord => typeof v === 'object' && v !== null;
 
 function unwrapArray<T>(payload: unknown): T[] {
@@ -32,6 +20,39 @@ function unwrapArray<T>(payload: unknown): T[] {
   if (isRecord(payload) && Array.isArray(payload.items)) return payload.items as T[];
   if (isRecord(payload) && Array.isArray(payload.data)) return payload.data as T[];
   return [];
+}
+
+/**
+ * Estructura mínima esperada desde tu backend /api/carbon/prices
+ * (ajustá si tu backend devuelve otro shape)
+ */
+type BackendPrice = {
+  price: number;
+  supply: number;
+  creditId?: {
+    projectId?: string;
+    vintage?: number;
+    standard?: string;
+  };
+};
+
+/**
+ * Type guard que TS sí entiende:
+ * después de .filter(isListingPrice), p.listing.creditId.projectId existe.
+ */
+function isListingPrice(p: Price): p is Price & {
+  supply: number;
+  purchasePrice: number;
+  listing: { creditId: { projectId: string } };
+} {
+  const anyP = p as any;
+  return (
+    anyP?.type === 'listing' &&
+    typeof anyP?.purchasePrice === 'number' &&
+    typeof anyP?.supply === 'number' &&
+    typeof anyP?.listing?.creditId?.projectId === 'string' &&
+    anyP.listing.creditId.projectId.length > 0
+  );
 }
 
 /* =====================
@@ -63,26 +84,43 @@ export default function useMarketplace(id?: string): UseMarketplace {
       try {
         setIsPricesLoading(true);
 
-        const res = await axiosPublicInstance.get(ENDPOINTS.prices);
+        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices);
         const raw = unwrapArray<BackendPrice>(res.data);
 
+        // Solo listings con supply > 0 y con projectId válido
         const adapted = raw
-          .filter((item) => item.supply > 0 && typeof item.price === 'number')
-          .map((item) => ({
-            type: 'listing' as const,
-            supply: item.supply,
-            purchasePrice: item.price,
-            listing: {
-              id: `listing-${item.projectId}-${item.vintage ?? 'any'}`, // 👈 IMPORTANTE
-              creditId: {
-                projectId: item.projectId,
-                vintage: item.vintage ?? 0,
-                standard: 'VCS' as const,
-              },
-            },
-          }));
+          .filter(
+            (i): i is BackendPrice & { creditId: NonNullable<BackendPrice['creditId']> } =>
+              typeof i?.price === 'number' &&
+              typeof i?.supply === 'number' &&
+              i.supply > 0 &&
+              !!i.creditId?.projectId
+          )
+          .map((item) => {
+            const projectId = item.creditId.projectId!;
+            const vintage = item.creditId.vintage ?? 0;
+            const standard = item.creditId.standard ?? 'VCS';
 
-        setPrices(adapted as Price[]);
+            // OJO: este shape lo usamos porque tu UI consume purchasePrice + listing.creditId.projectId
+            // Como tu type Price no matchea perfecto, casteamos controlado.
+            const mapped = {
+              type: 'listing',
+              supply: item.supply,
+              purchasePrice: item.price,
+              listing: {
+                id: `${projectId}-${vintage}`,
+                creditId: {
+                  projectId,
+                  vintage,
+                  standard,
+                },
+              },
+            };
+
+            return mapped as unknown as Price;
+          });
+
+        setPrices(adapted);
       } catch (e) {
         console.error('Error fetching prices', e);
         setPrices([]);
@@ -94,8 +132,10 @@ export default function useMarketplace(id?: string): UseMarketplace {
     fetchPrices();
   }, []);
 
+  const listingPrices = useMemo(() => prices.filter(isListingPrice), [prices]);
+
   /* =====================
-     PROJECTS
+     PROJECTS (SOLO CON STOCK)
   ===================== */
 
   useEffect(() => {
@@ -106,10 +146,8 @@ export default function useMarketplace(id?: string): UseMarketplace {
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
         const allProjects = unwrapArray<Project>(res.data);
 
-        // 🔑 SOLO proyectos con stock
-        const projectIdsWithStock = new Set(
-          prices.map((p) => p.listing?.creditId?.projectId).filter(Boolean)
-        );
+        // set de projectIds que tienen listings con stock
+        const projectIdsWithStock = new Set(listingPrices.map((p) => p.listing.creditId.projectId));
 
         const marketProjects = allProjects.filter((p) => projectIdsWithStock.has(p.key));
 
@@ -122,15 +160,15 @@ export default function useMarketplace(id?: string): UseMarketplace {
         }
       } catch (e) {
         console.error('Error fetching projects', e);
+        setProjects([]);
+        setProject(null);
       } finally {
         setLoading(false);
       }
     };
 
-    if (!isPricesLoading) {
-      fetchProjects();
-    }
-  }, [id, prices, isPricesLoading]);
+    if (!isPricesLoading) fetchProjects();
+  }, [id, isPricesLoading, listingPrices]);
 
   /* =====================
      FILTER + SORT
@@ -144,26 +182,34 @@ export default function useMarketplace(id?: string): UseMarketplace {
       list = list.filter((p) => p.name?.toLowerCase().includes(s));
     }
 
+    // armamos un map rápido projectId -> purchasePrice (el más barato si hay varios)
+    const priceByProjectId = new Map<string, number>();
+    for (const lp of listingPrices) {
+      const pid = lp.listing.creditId.projectId;
+      const current = priceByProjectId.get(pid);
+      if (current === undefined || lp.purchasePrice < current) {
+        priceByProjectId.set(pid, lp.purchasePrice);
+      }
+    }
+
     if (sortBy === 'price_asc') {
       list.sort((a, b) => {
-        const pa =
-          prices.find((p) => p.listing?.creditId?.projectId === a.key)?.purchasePrice ?? Infinity;
-        const pb =
-          prices.find((p) => p.listing?.creditId?.projectId === b.key)?.purchasePrice ?? Infinity;
+        const pa = priceByProjectId.get(a.key) ?? Infinity;
+        const pb = priceByProjectId.get(b.key) ?? Infinity;
         return pa - pb;
       });
     }
 
     if (sortBy === 'price_desc') {
       list.sort((a, b) => {
-        const pa = prices.find((p) => p.listing?.creditId?.projectId === a.key)?.purchasePrice ?? 0;
-        const pb = prices.find((p) => p.listing?.creditId?.projectId === b.key)?.purchasePrice ?? 0;
+        const pa = priceByProjectId.get(a.key) ?? 0;
+        const pb = priceByProjectId.get(b.key) ?? 0;
         return pb - pa;
       });
     }
 
     return list;
-  }, [projects, prices, searchTerm, sortBy]);
+  }, [projects, listingPrices, searchTerm, sortBy]);
 
   /* =====================
      RETIRE
@@ -179,15 +225,11 @@ export default function useMarketplace(id?: string): UseMarketplace {
     window.location.href = `/retireCheckout?${sp.toString()}`;
   };
 
-  /* =====================
-     RETURN
-  ===================== */
-
   return {
     filteredProjects,
     loading,
 
-    availableCategories: [],
+    availableCategories: [] as string[], // <- evita el never[]
     selectedCountries,
     setSelectedCountries,
     selectedCategories,
@@ -196,7 +238,6 @@ export default function useMarketplace(id?: string): UseMarketplace {
     setSelectedVintages,
     selectedUNSDG,
     setSelectedUNSDG,
-
     searchTerm,
     setSearchTerm,
     sortBy,
