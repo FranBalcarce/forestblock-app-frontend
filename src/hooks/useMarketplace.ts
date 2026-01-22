@@ -108,14 +108,8 @@ export default function useMarketplace(id?: string): UseMarketplace {
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
         const allProjects = unwrapArray<Project>(res.data);
 
-        // solo proyectos con stock
-        const projectIdsWithStock = new Set(
-          prices
-            .map((p) => p.listing?.creditId?.projectId)
-            .filter((id): id is string => Boolean(id))
-        );
-
         // const marketProjects = allProjects.filter((p) => projectIdsWithStock.has(p.key));
+        // ⛔ filtro desactivado temporalmente
         const marketProjects = allProjects;
 
         setProjects(marketProjects);
