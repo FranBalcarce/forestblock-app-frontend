@@ -1,210 +1,104 @@
+'use client';
+
 import { useEffect, useMemo, useState } from 'react';
-import type { Project } from '@/types/project';
-import type { Price, UseMarketplace, SortBy, RetireParams } from '@/types/marketplace';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
+import { Project } from '@/types/project';
+import { Price, UseMarketplace, RetireParams, SortBy } from '@/types/marketplace';
 
-const ENDPOINTS = {
-  projects: '/api/carbon/carbonProjects',
-  prices: '/api/carbon/prices',
-};
+/* ---------------------------------------------
+ Helpers
+--------------------------------------------- */
 
-/* =====================
-   HELPERS
-===================== */
-
-type UnknownRecord = Record<string, unknown>;
-const isRecord = (v: unknown): v is UnknownRecord => typeof v === 'object' && v !== null;
-
-function unwrapArray<T>(payload: unknown): T[] {
-  if (Array.isArray(payload)) return payload as T[];
-  if (isRecord(payload) && Array.isArray(payload.items)) return payload.items as T[];
-  if (isRecord(payload) && Array.isArray(payload.data)) return payload.data as T[];
+function unwrapArray<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (typeof data === 'object' && data && 'data' in data && Array.isArray((data as any).data)) {
+    return (data as any).data;
+  }
   return [];
 }
 
-/* =====================
-   TYPES
-===================== */
-
-type BackendPrice = {
-  price: number;
-  supply: number;
-  creditId?: {
-    projectId?: string;
-    vintage?: number;
-    standard?: string;
-  };
-};
-
-function isListingPrice(p: Price): p is Price & {
-  listing: { creditId: { projectId: string } };
-  purchasePrice: number;
-  supply: number;
-} {
-  return (
-    p.type === 'listing' &&
-    typeof p.purchasePrice === 'number' &&
-    typeof p.supply === 'number' &&
-    !!p.listing?.creditId?.projectId
-  );
-}
-
-/* =====================
-   HOOK
-===================== */
+/* ---------------------------------------------
+ Hook
+--------------------------------------------- */
 
 export default function useMarketplace(id?: string): UseMarketplace {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
+
   const [prices, setPrices] = useState<Price[]>([]);
+  const [isPricesLoading, setIsPricesLoading] = useState(false);
 
   const [loading, setLoading] = useState(true);
-  const [isPricesLoading, setIsPricesLoading] = useState(true);
-
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('price_asc');
 
-  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [selectedVintages, setSelectedVintages] = useState<string[]>([]);
-  const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
-
-  /* =====================
-     PRICES (SOLO CON STOCK REAL)
-  ===================== */
+  /* ---------------------------------------------
+     Fetch projects
+  --------------------------------------------- */
 
   useEffect(() => {
-    const fetchPrices = async () => {
+    async function fetchProjects() {
       try {
-        setIsPricesLoading(true);
+        const res = await axiosPublicInstance.get('/projects');
+        const data = unwrapArray<Project>(res.data);
+        setProjects(data);
 
-        const res = await axiosPublicInstance.get<unknown>(`${ENDPOINTS.prices}?minSupply=100`);
+        if (id) {
+          setProject(data.find((p) => p.key === id) ?? null);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
 
-        const raw = unwrapArray<BackendPrice>(res.data);
+    fetchProjects();
+  }, [id]);
 
-        const adapted: Price[] = raw
-          .filter(
-            (i): i is BackendPrice & { creditId: NonNullable<BackendPrice['creditId']> } =>
-              typeof i.price === 'number' &&
-              typeof i.supply === 'number' &&
-              i.supply > 0 &&
-              !!i.creditId?.projectId
-          )
-          .map((item) => {
-            const projectId = item.creditId.projectId!;
-            const vintage = item.creditId.vintage ?? 0;
-            const standard = item.creditId.standard ?? 'VCS';
+  /* ---------------------------------------------
+     Fetch prices (SOLO listings con supply)
+     🔑 Carbonmark recommendation: minSupply=100
+  --------------------------------------------- */
 
-            return {
-              type: 'listing',
-              supply: item.supply,
-              purchasePrice: item.price,
-              listing: {
-                id: `${projectId}-${vintage}`,
-                creditId: {
-                  projectId,
-                  vintage,
-                  standard,
-                },
-              },
-            } as Price;
-          });
+  useEffect(() => {
+    async function fetchPrices() {
+      setIsPricesLoading(true);
+      try {
+        const res = await axiosPublicInstance.get(
+          'https://v18.api.carbonmark.com/prices?minSupply=100'
+        );
 
-        setPrices(adapted);
-      } catch (e) {
-        console.error('Error fetching prices', e);
-        setPrices([]);
+        const raw = unwrapArray<Price>(res.data);
+
+        const valid = raw.filter(
+          (p) => p.type === 'listing' && p.supply > 0 && !!p.listing?.creditId?.projectId
+        );
+
+        setPrices(valid);
       } finally {
         setIsPricesLoading(false);
       }
-    };
+    }
 
     fetchPrices();
   }, []);
 
-  const listingPrices = useMemo(() => prices.filter(isListingPrice), [prices]);
-
-  /* =====================
-     PROJECTS (SOLO DISPONIBLES)
-  ===================== */
-
-  useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        setLoading(true);
-
-        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
-        const allProjects = unwrapArray<Project>(res.data);
-
-        const projectIdsWithStock = new Set(listingPrices.map((p) => p.listing.creditId.projectId));
-
-        const marketProjects = allProjects.filter((p) => projectIdsWithStock.has(p.key));
-
-        setProjects(marketProjects);
-
-        if (id) {
-          setProject(marketProjects.find((p) => p.key === id) ?? null);
-        } else {
-          setProject(null);
-        }
-      } catch (e) {
-        console.error('Error fetching projects', e);
-        setProjects([]);
-        setProject(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (!isPricesLoading) fetchProjects();
-  }, [id, isPricesLoading, listingPrices]);
-
-  /* =====================
-     FILTER + SORT
-  ===================== */
+  /* ---------------------------------------------
+     Filtrar proyectos DISPONIBLES
+  --------------------------------------------- */
 
   const filteredProjects = useMemo(() => {
-    let list = [...projects];
+    return projects.filter((project) =>
+      prices.some((price) => price.listing?.creditId?.projectId === project.key)
+    );
+  }, [projects, prices]);
 
-    if (searchTerm) {
-      const s = searchTerm.toLowerCase();
-      list = list.filter((p) => p.name?.toLowerCase().includes(s));
-    }
-
-    const priceByProjectId = new Map<string, number>();
-    for (const lp of listingPrices) {
-      const pid = lp.listing.creditId.projectId;
-      const current = priceByProjectId.get(pid);
-      if (current === undefined || lp.purchasePrice < current) {
-        priceByProjectId.set(pid, lp.purchasePrice);
-      }
-    }
-
-    if (sortBy === 'price_asc') {
-      list.sort((a, b) => {
-        const pa = priceByProjectId.get(a.key) ?? Infinity;
-        const pb = priceByProjectId.get(b.key) ?? Infinity;
-        return pa - pb;
-      });
-    }
-
-    if (sortBy === 'price_desc') {
-      list.sort((a, b) => {
-        const pa = priceByProjectId.get(a.key) ?? 0;
-        const pb = priceByProjectId.get(b.key) ?? 0;
-        return pb - pa;
-      });
-    }
-
-    return list;
-  }, [projects, listingPrices, searchTerm, sortBy]);
-
-  /* =====================
-     RETIRE
-  ===================== */
+  /* ---------------------------------------------
+     Retire
+  --------------------------------------------- */
 
   const handleRetire = (params: RetireParams) => {
     const sp = new URLSearchParams();
+    sp.set('id', params.id);
     sp.set('index', String(params.index));
     sp.set('price', params.priceParam);
     sp.set('selectedVintage', params.selectedVintage);
@@ -213,19 +107,24 @@ export default function useMarketplace(id?: string): UseMarketplace {
     window.location.href = `/retireCheckout?${sp.toString()}`;
   };
 
+  /* ---------------------------------------------
+     Return
+  --------------------------------------------- */
+
   return {
     filteredProjects,
     loading,
 
-    availableCategories: [] as string[],
-    selectedCountries,
-    setSelectedCountries,
-    selectedCategories,
-    setSelectedCategories,
-    selectedVintages,
-    setSelectedVintages,
-    selectedUNSDG,
-    setSelectedUNSDG,
+    availableCategories: [],
+    selectedCountries: [],
+    setSelectedCountries: () => {},
+    selectedCategories: [],
+    setSelectedCategories: () => {},
+    selectedVintages: [],
+    setSelectedVintages: () => {},
+    selectedUNSDG: [],
+    setSelectedUNSDG: () => {},
+
     searchTerm,
     setSearchTerm,
     sortBy,
@@ -235,7 +134,6 @@ export default function useMarketplace(id?: string): UseMarketplace {
     project,
     prices,
     isPricesLoading,
-
     handleRetire,
   };
 }

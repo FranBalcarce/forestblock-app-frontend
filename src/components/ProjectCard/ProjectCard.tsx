@@ -8,10 +8,9 @@ import { getProjectImage } from '@/utils/getProjectImage';
 
 interface ProjectCardProps {
   project: Project;
-  actionRenderer?: (project: Project) => React.ReactNode;
 }
 
-export default function ProjectCard({ project, actionRenderer }: ProjectCardProps) {
+export default function ProjectCard({ project }: ProjectCardProps) {
   const router = useRouter();
 
   const handlePurchase = () => {
@@ -19,10 +18,10 @@ export default function ProjectCard({ project, actionRenderer }: ProjectCardProp
   };
 
   const projectImage = getProjectImage(project);
-  const vintages = formatVintages(project.vintages);
+  const vintages = formatVintages(project.vintages ?? []);
 
   return (
-    <div className="relative bg-white rounded-xl overflow-hidden shadow-md text-center transition-transform hover:scale-105 hover:shadow-lg h-[300px] sm:h-[360px] lg:h-[320px]">
+    <div className="relative bg-white rounded-xl overflow-hidden shadow-md h-[320px]">
       <BackgroundImage imageUrl={projectImage} />
 
       <OverlayContent
@@ -35,12 +34,6 @@ export default function ProjectCard({ project, actionRenderer }: ProjectCardProp
         sdgs={project.sustainableDevelopmentGoals?.length ?? 0}
         sdgsArray={project.sustainableDevelopmentGoals ?? []}
       />
-
-      {actionRenderer && (
-        <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-          {actionRenderer(project)}
-        </div>
-      )}
     </div>
   );
 }

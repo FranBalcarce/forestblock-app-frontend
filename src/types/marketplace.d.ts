@@ -1,45 +1,36 @@
 import type { Project } from './project';
 
+/* ===================== SORT ===================== */
 export type SortBy = 'price_asc' | 'price_desc' | 'recently_updated' | 'newest' | 'oldest' | 'name';
 
+/* ===================== CREDIT ===================== */
 export interface ListingCreditId {
-  standard: string; // 👈 CLAVE (VCS, GS, etc)
-  projectId: string; // ej: "191"
+  standard: string; // VCS, GS, etc
+  projectId: string; // ej: "VCS-191"
   vintage: number;
 }
 
-export interface ListingToken {
-  id: string;
-  address: string;
-  decimals: number;
-  tokenStandard: string;
-  name: string;
-  isExAnte: boolean;
-  symbol: string;
-  tokenId: number;
-}
-
-export interface ListingPricePayload {
-  id: string;
-  creditId?: ListingCreditId;
-  token: ListingToken;
-  sellerId: string;
-}
-
+/* ===================== PRICE (USADO POR MARKETPLACE) ===================== */
 export interface Price {
-  sourceId: string;
+  id: string;
   type: 'listing';
   purchasePrice: number;
-  baseUnitPrice: number;
   supply: number;
-  minFillAmount: number;
-  listing?: ListingPricePayload;
-  carbonPool?: {
-    creditId: { vintage: number; projectId: string; creditId: string };
-    token: ListingToken;
+
+  /** 🔑 modelo nuevo Carbonmark */
+  creditId: ListingCreditId;
+
+  /**
+   * 🔁 compatibilidad con UI vieja
+   * (NO se usa para lógica)
+   */
+  listing?: {
+    id: string;
+    creditId: ListingCreditId;
   };
 }
 
+/* ===================== HOOK ===================== */
 export interface UseMarketplace {
   filteredProjects: Project[];
   loading: boolean;
@@ -64,14 +55,10 @@ export interface UseMarketplace {
   prices: Price[];
   isPricesLoading: boolean;
 
-  handleRetire: (params: {
-    id: string;
-    index: number;
-    priceParam: string;
-    selectedVintage: string;
-    quantity: number;
-  }) => void;
+  handleRetire: (params: RetireParams) => void;
 }
+
+/* ===================== RETIRE ===================== */
 export type RetireParams = {
   id: string;
   index: number;
