@@ -103,9 +103,9 @@ export const useRetireCheckout = (index?: string | null) => {
       if (!projectIds) return;
 
       try {
-        const response = await axiosPublicInstance.get<unknown>(
-          `/carbon/carbonProjects/${projectIds}`
-        );
+        const response = await axiosPublicInstance.get('/api/carbon/carbonProjects', {
+          params: { projectIds },
+        });
 
         if (!isRecord(response) || !isRecord(response.data)) return;
 
