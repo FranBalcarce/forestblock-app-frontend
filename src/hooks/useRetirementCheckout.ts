@@ -107,12 +107,10 @@ export const useRetireCheckout = (index?: string | null) => {
           params: { projectIds },
         });
 
-        if (!isRecord(response) || !isRecord(response.data)) return;
+        if (!response.data) return;
 
         setProject(response.data);
-        setTotalSupply(
-          isRecord(response.data.stats) ? (response.data.stats.totalSupply as number) : 0
-        );
+        setTotalSupply(response.data?.stats?.totalSupply ?? 0);
       } catch (err) {
         console.error('Error fetching project', err);
       }
