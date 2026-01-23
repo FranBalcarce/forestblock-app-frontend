@@ -64,7 +64,7 @@ export const useRetireCheckout = (index?: string | null) => {
           paramsSerializer: (params) => qs.stringify(params, { arrayFormat: 'repeat' }),
         });
 
-        const prices = unwrapArray<Price>(response);
+        const prices = unwrapArray<Price>(response.data);
 
         const targetFinal = Number(priceParam);
         const targetRaw = targetFinal / PRICE_MULTIPLIER;
@@ -72,12 +72,10 @@ export const useRetireCheckout = (index?: string | null) => {
 
         const found =
           prices.find((p) => {
-            const raw = typeof p.purchasePrice === 'number' ? p.purchasePrice : p.baseUnitPrice;
-
-            const priceMatch = raw === targetRaw;
+            const priceMatch = p.purchasePrice === targetRaw;
 
             if (targetVintage !== null) {
-              const v = p.listing?.creditId?.vintage ?? p.carbonPool?.creditId?.vintage;
+              const v = p.listing?.creditId?.vintage;
               return priceMatch && v === targetVintage;
             }
 
@@ -91,7 +89,7 @@ export const useRetireCheckout = (index?: string | null) => {
 
         setListing({
           ...found,
-          purchasePrice: (found.purchasePrice ?? found.baseUnitPrice) * PRICE_MULTIPLIER,
+          purchasePrice: found.purchasePrice * PRICE_MULTIPLIER,
         });
       } catch (err) {
         console.error(err);
@@ -147,10 +145,12 @@ export const useRetireCheckout = (index?: string | null) => {
         pricePerUnit: listing?.purchasePrice,
         quantity: tonnesToRetire,
         paymentId: payment.data.paymentData.paymentId,
-        name: listing?.listing?.id ?? listing?.carbonPool?.creditId?.projectId,
+        name: listing?.listing?.id ?? listing?.listing?.creditId?.projectId,
       });
 
-      if (session.data?.url) window.location.href = session.data.url;
+      if (session.data?.url) {
+        window.location.href = session.data.url;
+      }
     } catch (error) {
       const msg =
         (error as AxiosError<{ message: string }>)?.response?.data?.message ?? 'Error en pago';
