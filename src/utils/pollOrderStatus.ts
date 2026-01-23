@@ -1,6 +1,6 @@
-import { PollingResponse } from "@/types/retirement";
-import { axiosPublicInstance } from "./axios/axiosPublicInstance";
-import { handleError } from "./retirementSteps";
+import { PollingResponse } from '@/types/retirement';
+import { axiosPublicInstance } from './axios/axiosPublicInstance';
+import { handleError } from './retirementSteps';
 
 const pollOrderStatus = (
   quoteId: string,
@@ -19,23 +19,22 @@ const pollOrderStatus = (
       return;
     }
     try {
-      const response = await axiosPublicInstance.get<PollingResponse[]>(
-        "/carbon/orders",
-        { params: { quote_uuid: quoteId } }
-      );
+      const response = await axiosPublicInstance.get<PollingResponse[]>('/api/carbon/orders', {
+        params: { quote_uuid: quoteId },
+      });
       const data = response.data;
-      if (data[0]?.status === "COMPLETED") {
+      if (data[0]?.status === 'COMPLETED') {
         clearInterval(interval);
         onSuccess(data[0]);
         return;
       }
       if (Date.now() - startTime >= maxPollingTime) {
         clearInterval(interval);
-        onError("Polling timed out. Order status not confirmed.");
+        onError('Polling timed out. Order status not confirmed.');
       }
     } catch (err) {
       clearInterval(interval);
-      onError(handleError(err, "Error while polling order status."));
+      onError(handleError(err, 'Error while polling order status.'));
     }
   }, pollingInterval);
 };

@@ -59,7 +59,7 @@ export const useRetireCheckout = (index?: string | null) => {
       }
 
       try {
-        const response = await axiosPublicInstance.get<unknown>('/carbon/prices', {
+        const response = await axiosPublicInstance.get<unknown>('/api/carbon/prices', {
           params: { projectIds },
           paramsSerializer: (params) => qs.stringify(params, { arrayFormat: 'repeat' }),
         });
