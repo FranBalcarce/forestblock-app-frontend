@@ -52,7 +52,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
   useEffect(() => {
     async function fetchProjects() {
       try {
-        const res = await axiosPublicInstance.get('/projects');
+        const res = await axiosPublicInstance.get('/carbon/carbonProjects');
         const data = unwrapArray<Project>(res.data);
         setProjects(data);
 
