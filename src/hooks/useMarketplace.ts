@@ -9,11 +9,24 @@ import { Price, UseMarketplace, RetireParams, SortBy } from '@/types/marketplace
  Helpers
 --------------------------------------------- */
 
+type UnknownRecord = Record<string, unknown>;
+
+const isRecord = (v: unknown): v is UnknownRecord => typeof v === 'object' && v !== null;
+
 function unwrapArray<T>(data: unknown): T[] {
-  if (Array.isArray(data)) return data as T[];
-  if (typeof data === 'object' && data && 'data' in data && Array.isArray((data as any).data)) {
-    return (data as any).data;
+  if (Array.isArray(data)) {
+    return data as T[];
   }
+
+  if (isRecord(data)) {
+    if (Array.isArray(data.data)) {
+      return data.data as T[];
+    }
+    if (Array.isArray(data.items)) {
+      return data.items as T[];
+    }
+  }
+
   return [];
 }
 
