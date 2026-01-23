@@ -14,7 +14,6 @@ import type { Price, RetireParams } from '@/types/marketplace';
    Helpers
 --------------------------------------------- */
 
-// Convierte cualquier formato raro de imagen en string usable
 const getImageUrl = (img: unknown): string | null => {
   if (!img) return null;
 
@@ -30,7 +29,7 @@ const getImageUrl = (img: unknown): string | null => {
 
   if (typeof img === 'object') {
     const o = img as Record<string, unknown>;
-    const direct = o.url ?? o.src ?? o.imageUrl;
+    const direct = o.url ?? o.src ?? o.imageUrl ?? o.cover ?? o.thumbnail;
     if (typeof direct === 'string') return direct;
   }
 
@@ -142,7 +141,7 @@ export default function ProjectInfo({
           <div className="mt-5 text-base font-medium">
             Precio:{' '}
             <span className="font-semibold">
-              {displayPrice !== '—' ? `$${displayPrice}` : 'No disponible'}
+              {displayPrice ? `$${displayPrice}` : 'No disponible'}
             </span>{' '}
             / tCO₂
           </div>

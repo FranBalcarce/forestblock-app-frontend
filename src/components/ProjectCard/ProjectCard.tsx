@@ -14,14 +14,7 @@ interface ProjectCardProps {
 export default function ProjectCard({ project, actionRenderer }: ProjectCardProps) {
   const router = useRouter();
 
-  const isDevProject = project.key?.startsWith('nf-');
-
   const handlePurchase = () => {
-    if (isDevProject) {
-      router.push(`/new-feature/${project.key}`);
-      return;
-    }
-
     router.push(`/marketplace/${project.key}`);
   };
 
@@ -37,7 +30,7 @@ export default function ProjectCard({ project, actionRenderer }: ProjectCardProp
         country={project.country}
         category={project.methodologies?.[0]?.category}
         name={project.name}
-        price={null} // 👈 CORRECTO
+        price={project.displayPrice ?? '—'}
         onPurchase={handlePurchase}
         sdgs={project.sustainableDevelopmentGoals?.length ?? 0}
         sdgsArray={project.sustainableDevelopmentGoals ?? []}
