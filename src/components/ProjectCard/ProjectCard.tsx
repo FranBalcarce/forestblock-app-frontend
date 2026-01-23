@@ -22,14 +22,7 @@ export default function ProjectCard({ project, actionRenderer }: ProjectCardProp
       return;
     }
 
-    const price = project.displayPrice ?? project.price ?? '';
-    const vintages = (project.vintages ?? []).join(',');
-
-    const qs = new URLSearchParams();
-    if (price) qs.set('price', String(price));
-    if (vintages) qs.set('vintages', vintages);
-
-    router.push(`/marketplace/${project.key}?${qs.toString()}`);
+    router.push(`/marketplace/${project.key}`);
   };
 
   const projectImage = getProjectImage(project);
@@ -44,7 +37,7 @@ export default function ProjectCard({ project, actionRenderer }: ProjectCardProp
         country={project.country}
         category={project.methodologies?.[0]?.category}
         name={project.name}
-        price={project.displayPrice ?? project.price}
+        price={null} // 👈 CORRECTO
         onPurchase={handlePurchase}
         sdgs={project.sustainableDevelopmentGoals?.length ?? 0}
         sdgsArray={project.sustainableDevelopmentGoals ?? []}

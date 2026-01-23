@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Project } from '@/types/project';
-import type { Price, UseMarketplace, SortBy, RetireParams } from '@/types/marketplace';
+import type { UseMarketplace, SortBy, RetireParams } from '@/types/marketplace';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
 const ENDPOINTS = {
   projects: '/api/carbon/carbonProjects',
-  prices: '/api/carbon/prices',
 };
 
 /* =====================
@@ -23,61 +22,13 @@ function unwrapArray<T>(payload: unknown): T[] {
 }
 
 /* =====================
-   BACKEND TYPES
-===================== */
-
-type BackendPrice = {
-  price: number;
-  supply: number;
-  creditId?: {
-    projectId?: string;
-    vintage?: number;
-    standard?: string;
-  };
-};
-
-/* =====================
-   TYPE GUARD (SIN any)
-===================== */
-
-type ListingPriceShape = {
-  type: 'listing';
-  supply: number;
-  purchasePrice: number;
-  listing?: {
-    creditId?: {
-      projectId?: string;
-    };
-  };
-};
-
-function isListingPrice(p: Price): p is Price & {
-  supply: number;
-  purchasePrice: number;
-  listing: { creditId: { projectId: string } };
-} {
-  const lp = p as unknown as ListingPriceShape;
-
-  return (
-    lp.type === 'listing' &&
-    typeof lp.purchasePrice === 'number' &&
-    typeof lp.supply === 'number' &&
-    typeof lp.listing?.creditId?.projectId === 'string' &&
-    lp.listing.creditId.projectId.length > 0
-  );
-}
-
-/* =====================
    HOOK
 ===================== */
 
 export default function useMarketplace(id?: string): UseMarketplace {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
-  const [prices, setPrices] = useState<Price[]>([]);
-
   const [loading, setLoading] = useState(true);
-  const [isPricesLoading, setIsPricesLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('price_asc');
@@ -88,65 +39,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
   const [selectedUNSDG, setSelectedUNSDG] = useState<string[]>([]);
 
   /* =====================
-     PRICES
-  ===================== */
-
-  useEffect(() => {
-    const fetchPrices = async () => {
-      try {
-        setIsPricesLoading(true);
-
-        const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.prices);
-        const raw = unwrapArray<BackendPrice>(res.data);
-
-        const adapted: Price[] = raw
-          .filter(
-            (
-              i
-            ): i is BackendPrice & {
-              creditId: NonNullable<BackendPrice['creditId']>;
-            } =>
-              typeof i.price === 'number' &&
-              typeof i.supply === 'number' &&
-              i.supply > 0 &&
-              typeof i.creditId?.projectId === 'string'
-          )
-          .map((item) => {
-            const projectId = item.creditId.projectId;
-            const vintage = item.creditId.vintage ?? 0;
-            const standard = item.creditId.standard ?? 'VCS';
-
-            return {
-              type: 'listing',
-              supply: item.supply,
-              purchasePrice: item.price,
-              listing: {
-                id: `${projectId}-${vintage}`,
-                creditId: {
-                  projectId,
-                  vintage,
-                  standard,
-                },
-              },
-            } as Price;
-          });
-
-        setPrices(adapted);
-      } catch (e) {
-        console.error('Error fetching prices', e);
-        setPrices([]);
-      } finally {
-        setIsPricesLoading(false);
-      }
-    };
-
-    fetchPrices();
-  }, []);
-
-  const listingPrices = useMemo(() => prices.filter(isListingPrice), [prices]);
-
-  /* =====================
-     PROJECTS (SOLO CON STOCK)
+     PROJECTS
   ===================== */
 
   useEffect(() => {
@@ -157,14 +50,10 @@ export default function useMarketplace(id?: string): UseMarketplace {
         const res = await axiosPublicInstance.get<unknown>(ENDPOINTS.projects);
         const allProjects = unwrapArray<Project>(res.data);
 
-        const projectIdsWithStock = new Set(listingPrices.map((p) => p.listing.creditId.projectId));
-
-        const marketProjects = allProjects.filter((p) => projectIdsWithStock.has(p.key));
-
-        setProjects(marketProjects);
+        setProjects(allProjects);
 
         if (id) {
-          setProject(marketProjects.find((p) => p.key === id) ?? null);
+          setProject(allProjects.find((p) => p.key === id) ?? null);
         } else {
           setProject(null);
         }
@@ -177,11 +66,11 @@ export default function useMarketplace(id?: string): UseMarketplace {
       }
     };
 
-    if (!isPricesLoading) fetchProjects();
-  }, [id, isPricesLoading, listingPrices]);
+    fetchProjects();
+  }, [id]);
 
   /* =====================
-     FILTER + SORT
+     FILTER + SORT (SIN PRECIOS)
   ===================== */
 
   const filteredProjects = useMemo(() => {
@@ -192,33 +81,13 @@ export default function useMarketplace(id?: string): UseMarketplace {
       list = list.filter((p) => p.name?.toLowerCase().includes(s));
     }
 
-    const priceByProjectId = new Map<string, number>();
-    for (const lp of listingPrices) {
-      const pid = lp.listing.creditId.projectId;
-      const current = priceByProjectId.get(pid);
-      if (current === undefined || lp.purchasePrice < current) {
-        priceByProjectId.set(pid, lp.purchasePrice);
-      }
-    }
-
-    if (sortBy === 'price_asc') {
-      list.sort((a, b) => {
-        const pa = priceByProjectId.get(a.key) ?? Infinity;
-        const pb = priceByProjectId.get(b.key) ?? Infinity;
-        return pa - pb;
-      });
-    }
-
-    if (sortBy === 'price_desc') {
-      list.sort((a, b) => {
-        const pa = priceByProjectId.get(a.key) ?? 0;
-        const pb = priceByProjectId.get(b.key) ?? 0;
-        return pb - pa;
-      });
+    // Orden alfabético como fallback
+    if (sortBy === 'price_asc' || sortBy === 'price_desc') {
+      list.sort((a, b) => a.name.localeCompare(b.name));
     }
 
     return list;
-  }, [projects, listingPrices, searchTerm, sortBy]);
+  }, [projects, searchTerm, sortBy]);
 
   /* =====================
      RETIRE
@@ -238,7 +107,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
     filteredProjects,
     loading,
 
-    availableCategories: [],
+    availableCategories: [] as string[],
     selectedCountries,
     setSelectedCountries,
     selectedCategories,
@@ -247,7 +116,6 @@ export default function useMarketplace(id?: string): UseMarketplace {
     setSelectedVintages,
     selectedUNSDG,
     setSelectedUNSDG,
-
     searchTerm,
     setSearchTerm,
     sortBy,
@@ -255,8 +123,9 @@ export default function useMarketplace(id?: string): UseMarketplace {
 
     projects,
     project,
-    prices,
-    isPricesLoading,
+
+    prices: [], // 👈 ya no se usan acá
+    isPricesLoading: false,
 
     handleRetire,
   };
