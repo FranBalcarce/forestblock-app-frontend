@@ -25,15 +25,12 @@ export interface Project {
 
   location: Location;
 
-  /** 📸 Imágenes del proyecto */
+  /** ⚠️ pueden NO existir */
   images?: Image[];
   coverImage?: Image;
 
-  /** 🛰️ Imagen satelital (Carbonmark / mapas) */
-  satelliteImage?: {
-    url: string;
-    caption?: string;
-  };
+  /** 🛰 opcional */
+  satelliteImage?: Image;
 
   url: string;
 

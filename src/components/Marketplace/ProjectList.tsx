@@ -9,6 +9,7 @@ import { FiFilter } from 'react-icons/fi';
 
 import type { Project } from '@/types/project';
 import type { SortBy } from '@/types/marketplace';
+import type { Image as ProjectImage } from '@/types/project'; // 👈 alias CLAVE
 
 interface ProjectListProps {
   loading: boolean;
@@ -29,8 +30,13 @@ const ProjectList: React.FC<ProjectListProps> = ({
 }) => {
   const [currentView, setCurrentView] = useState<'grid' | 'list' | 'map'>('grid');
 
+  /* ✅ normalizamos imágenes para el mapa */
+  const galleryImages: ProjectImage[] = projects
+    .map((p) => p.images?.[0])
+    .filter((img): img is ProjectImage => Boolean(img));
+
   const { customIcon } = useGallery({
-    images: projects.map((p) => p.images?.[0]),
+    images: galleryImages,
   });
 
   /* ✅ handlers EXPLÍCITOS (clave para TS) */
@@ -76,15 +82,17 @@ const ProjectList: React.FC<ProjectListProps> = ({
       )}
 
       {currentView === 'map' && (
-        <div className="h-96 bg-gray-200">
+        <div className="h-96 bg-gray-200 rounded-xl overflow-hidden">
           <MapView
-            projectLocations={projects.map((project) => ({
-              coordinates: [
-                project.location.geometry.coordinates[1],
-                project.location.geometry.coordinates[0],
-              ] as [number, number],
-              name: project.name,
-            }))}
+            projectLocations={projects
+              .filter((p) => p.location?.geometry?.coordinates)
+              .map((project) => ({
+                coordinates: [
+                  project.location.geometry.coordinates[1],
+                  project.location.geometry.coordinates[0],
+                ] as [number, number],
+                name: project.name,
+              }))}
             customIcon={customIcon}
           />
         </div>
