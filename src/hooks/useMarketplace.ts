@@ -13,6 +13,10 @@ type UnknownRecord = Record<string, unknown>;
 
 const isRecord = (v: unknown): v is UnknownRecord => typeof v === 'object' && v !== null;
 
+/**
+ * Helper SOLO para endpoints externos (prices),
+ * donde la forma puede variar.
+ */
 function unwrapArray<T>(data: unknown): T[] {
   if (Array.isArray(data)) {
     return data as T[];
@@ -46,19 +50,24 @@ export default function useMarketplace(id?: string): UseMarketplace {
   const [sortBy, setSortBy] = useState<SortBy>('price_asc');
 
   /* ---------------------------------------------
-     Fetch projects
+     Fetch projects (BACKEND PROPIO)
+     ✅ response = { count, items }
   --------------------------------------------- */
 
   useEffect(() => {
     async function fetchProjects() {
       try {
-        const res = await axiosPublicInstance.get('/carbon/carbonProjects');
-        const data = unwrapArray<Project>(res.data);
-        setProjects(data);
+        const res = await axiosPublicInstance.get('/api/carbon/carbonProjects');
+
+        const items: Project[] = res.data?.items ?? [];
+
+        setProjects(items);
 
         if (id) {
-          setProject(data.find((p) => p.key === id) ?? null);
+          setProject(items.find((p) => p.key === id) ?? null);
         }
+      } catch (error) {
+        console.error('Error fetching projects:', error);
       } finally {
         setLoading(false);
       }
@@ -68,8 +77,8 @@ export default function useMarketplace(id?: string): UseMarketplace {
   }, [id]);
 
   /* ---------------------------------------------
-     Fetch prices (SOLO listings con supply)
-     🔑 Carbonmark recommendation: minSupply=100
+     Fetch prices (Carbonmark directo)
+     🔑 Recomendación oficial: minSupply=100
   --------------------------------------------- */
 
   useEffect(() => {
@@ -87,6 +96,8 @@ export default function useMarketplace(id?: string): UseMarketplace {
         );
 
         setPrices(valid);
+      } catch (error) {
+        console.error('Error fetching prices:', error);
       } finally {
         setIsPricesLoading(false);
       }
@@ -97,9 +108,12 @@ export default function useMarketplace(id?: string): UseMarketplace {
 
   /* ---------------------------------------------
      Filtrar proyectos DISPONIBLES
+     (solo los que tienen listings con supply)
   --------------------------------------------- */
 
   const filteredProjects = useMemo(() => {
+    if (!projects.length || !prices.length) return [];
+
     return projects.filter((project) =>
       prices.some((price) => price.listing?.creditId?.projectId === project.key)
     );
