@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 import { Project } from '@/types/project';
-import { Price, UseMarketplace, RetireParams, SortBy } from '@/types/marketplace';
+import { UseMarketplace, RetireParams, SortBy } from '@/types/marketplace';
 
 /* ---------------------------------------------
  Helpers
@@ -13,22 +13,12 @@ type UnknownRecord = Record<string, unknown>;
 
 const isRecord = (v: unknown): v is UnknownRecord => typeof v === 'object' && v !== null;
 
-/**
- * Helper SOLO para endpoints externos (prices),
- * donde la forma puede variar.
- */
 function unwrapArray<T>(data: unknown): T[] {
-  if (Array.isArray(data)) {
-    return data as T[];
-  }
+  if (Array.isArray(data)) return data as T[];
 
   if (isRecord(data)) {
-    if (Array.isArray(data.data)) {
-      return data.data as T[];
-    }
-    if (Array.isArray(data.items)) {
-      return data.items as T[];
-    }
+    if (Array.isArray(data.items)) return data.items as T[];
+    if (Array.isArray(data.data)) return data.data as T[];
   }
 
   return [];
@@ -42,82 +32,38 @@ export default function useMarketplace(id?: string): UseMarketplace {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
 
-  const [prices, setPrices] = useState<Price[]>([]);
-  const [isPricesLoading, setIsPricesLoading] = useState(false);
-
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('price_asc');
 
   /* ---------------------------------------------
-     Fetch projects (BACKEND PROPIO)
-     ✅ response = { count, items }
+     Fetch MARKETPLACE PROJECTS (BACKEND JOIN)
   --------------------------------------------- */
 
   useEffect(() => {
-    async function fetchProjects() {
+    async function fetchMarketplace() {
       try {
         const res = await axiosPublicInstance.get('/api/carbon/carbonProjects');
 
-        const items: Project[] = res.data?.items ?? [];
+        const data = unwrapArray<Project>(res.data);
 
-        setProjects(items);
+        console.log('🟢 MARKETPLACE PROJECTS:', data.length);
+        console.log('🟢 FIRST PROJECT:', data[0]);
+
+        setProjects(data);
 
         if (id) {
-          setProject(items.find((p) => p.key === id) ?? null);
+          setProject(data.find((p) => p.key === id) ?? null);
         }
-      } catch (error) {
-        console.error('Error fetching projects:', error);
+      } catch (err) {
+        console.error('❌ Error fetching marketplace projects', err);
       } finally {
         setLoading(false);
       }
     }
 
-    fetchProjects();
+    fetchMarketplace();
   }, [id]);
-
-  /* ---------------------------------------------
-     Fetch prices (Carbonmark directo)
-     🔑 Recomendación oficial: minSupply=100
-  --------------------------------------------- */
-
-  useEffect(() => {
-    async function fetchPrices() {
-      setIsPricesLoading(true);
-      try {
-        const res = await axiosPublicInstance.get(
-          'https://v18.api.carbonmark.com/prices?minSupply=100'
-        );
-
-        const raw = unwrapArray<Price>(res.data);
-
-        const valid = raw.filter(
-          (p) => p.type === 'listing' && p.supply > 0 && !!p.listing?.creditId?.projectId
-        );
-
-        setPrices(valid);
-      } catch (error) {
-        console.error('Error fetching prices:', error);
-      } finally {
-        setIsPricesLoading(false);
-      }
-    }
-
-    fetchPrices();
-  }, []);
-
-  /* ---------------------------------------------
-     Filtrar proyectos DISPONIBLES
-     (solo los que tienen listings con supply)
-  --------------------------------------------- */
-
-  const filteredProjects = useMemo(() => {
-    if (!projects.length || !prices.length) return [];
-
-    return projects.filter((project) =>
-      prices.some((price) => price.listing?.creditId?.projectId === project.key)
-    );
-  }, [projects, prices]);
 
   /* ---------------------------------------------
      Retire
@@ -139,9 +85,13 @@ export default function useMarketplace(id?: string): UseMarketplace {
   --------------------------------------------- */
 
   return {
-    filteredProjects,
+    // 🔥 USAR DIRECTAMENTE ESTOS
+    filteredProjects: projects,
+    projects,
+    project,
     loading,
 
+    // filtros (los podés implementar después)
     availableCategories: [],
     selectedCountries: [],
     setSelectedCountries: () => {},
@@ -157,10 +107,9 @@ export default function useMarketplace(id?: string): UseMarketplace {
     sortBy,
     setSortBy,
 
-    projects,
-    project,
-    prices,
-    isPricesLoading,
+    prices: [], // ❌ ya no se usan en frontend
+    isPricesLoading: false,
+
     handleRetire,
   };
 }
