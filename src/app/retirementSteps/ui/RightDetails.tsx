@@ -1,6 +1,6 @@
-import { Project } from "@/types/project";
-import Image from "next/image";
-import React from "react";
+import { Project } from '@/types/project';
+import Image from 'next/image';
+import React from 'react';
 // import { LiaExternalLinkAltSolid } from "react-icons/lia";
 
 const RightDetails = ({ project }: { project: Project | null }) => {
@@ -10,9 +10,7 @@ const RightDetails = ({ project }: { project: Project | null }) => {
         <div className="w-full h-60 md:h-72 bg-cover bg-center relative rounded-t-2xl overflow-hidden">
           <div className="absolute inset-0 bg-black/50 rounded-t-2xl"></div>
           <div className="absolute top-4 md:top-7 left-4 md:left-7 flex items-center justify-center border border-white/60 rounded-full py-1 px-3">
-            <h1 className="text-white font-aeonik text-sm md:text-[21px]">
-              Detalles del proyecto
-            </h1>
+            <h1 className="text-white font-aeonik text-sm md:text-[21px]">Detalles del proyecto</h1>
           </div>
           <div className="absolute bottom-4 md:bottom-7 left-4 md:left-7 flex items-center gap-1 md:gap-2 py-1 px-2 md:px-3">
             <div className="flex flex-col">
@@ -26,15 +24,11 @@ const RightDetails = ({ project }: { project: Project | null }) => {
           </div>
           <Image
             src={
-              project?.images[0]?.url ||
-              project?.satelliteImage?.url ||
-              "/images/placeholder.jpg"
+              project?.images?.[0]?.url || project?.satelliteImage?.url || '/images/placeholder.jpg'
             }
+            alt={project?.name || 'Proyecto'}
             width={400}
-            height={400}
-            alt="Proyecto"
-            className="rounded-t-2xl"
-            style={{ objectFit: "cover", width: "100%", height: "100%" }}
+            height={300}
           />
         </div>
 
