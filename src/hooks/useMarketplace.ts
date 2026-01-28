@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 import { Project } from '@/types/project';
 import { UseMarketplace, RetireParams, SortBy } from '@/types/marketplace';
@@ -37,28 +37,23 @@ export default function useMarketplace(id?: string): UseMarketplace {
   const [sortBy, setSortBy] = useState<SortBy>('price_asc');
 
   /* ---------------------------------------------
-     Fetch MARKETPLACE PROJECTS (BACKEND JOIN)
+     Fetch MARKETPLACE PROJECTS
   --------------------------------------------- */
 
   useEffect(() => {
     async function fetchMarketplace() {
       try {
         const res = await axiosPublicInstance.get('/api/carbon/carbonProjects');
+
         const data = unwrapArray<Project>(res.data);
 
         console.log('🟢 RAW PROJECTS:', data.length);
+        console.log('🟢 FIRST PROJECT:', data[0]);
 
-        // 🔥 SOLO proyectos con precio real
-        const sellableProjects = data.filter(
-          (p) => typeof p.minPrice === 'number' && p.minPrice > 0 && p.hasSupply !== false
-        );
-
-        console.log('🟢 SELLABLE PROJECTS:', sellableProjects.length);
-
-        setProjects(sellableProjects);
+        setProjects(data);
 
         if (id) {
-          setProject(sellableProjects.find((p) => p.key === id) ?? null);
+          setProject(data.find((p) => p.key === id) ?? null);
         }
       } catch (err) {
         console.error('❌ Error fetching marketplace projects', err);
@@ -69,46 +64,6 @@ export default function useMarketplace(id?: string): UseMarketplace {
 
     fetchMarketplace();
   }, [id]);
-
-  /* ---------------------------------------------
-     Filter + Search + Sort
-  --------------------------------------------- */
-
-  const filteredProjects = useMemo(() => {
-    let result = [...projects];
-
-    // 🔍 Search
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.name.toLowerCase().includes(term) ||
-          p.country?.toLowerCase().includes(term) ||
-          p.registry?.toLowerCase().includes(term)
-      );
-    }
-
-    // 🔃 Sort
-    switch (sortBy) {
-      case 'price_asc':
-        result.sort((a, b) => (a.minPrice ?? 0) - (b.minPrice ?? 0));
-        break;
-
-      case 'price_desc':
-        result.sort((a, b) => (b.minPrice ?? 0) - (a.minPrice ?? 0));
-        break;
-
-      case 'name_asc':
-        result.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-
-      case 'name_desc':
-        result.sort((a, b) => b.name.localeCompare(a.name));
-        break;
-    }
-
-    return result;
-  }, [projects, searchTerm, sortBy]);
 
   /* ---------------------------------------------
      Retire
@@ -128,11 +83,10 @@ export default function useMarketplace(id?: string): UseMarketplace {
   /* ---------------------------------------------
      Return
   --------------------------------------------- */
+  const filteredProjects = projects;
 
   return {
-    // ⚠️ NO filtrar todavía
-    filteredProjects: projects,
-
+    filteredProjects, // ✅ requerido por UseMarketplace
     projects,
     project,
     loading,
