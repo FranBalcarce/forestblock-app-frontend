@@ -130,15 +130,13 @@ export default function useMarketplace(id?: string): UseMarketplace {
   --------------------------------------------- */
 
   return {
-    // 🔥 ESTE es el que debe usar la UI
-    filteredProjects,
+    // ⚠️ NO filtrar todavía
+    filteredProjects: projects,
 
-    // por compatibilidad
     projects,
     project,
     loading,
 
-    // filtros (los implementás después)
     availableCategories: [],
     selectedCountries: [],
     setSelectedCountries: () => {},
