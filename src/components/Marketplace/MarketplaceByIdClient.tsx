@@ -1,41 +1,31 @@
 'use client';
 
-import { useMemo } from 'react';
 import useMarketplace from '@/hooks/useMarketplace';
 import ProjectInfo from '@/components/ProjectInfo/ProjectInfo';
-import { Price } from '@/types/marketplace';
+import type { SellableProject } from '@/types/marketplace';
 
 type Props = {
   id: string;
 };
 
 export default function MarketplaceByIdClient({ id }: Props) {
-  const { project, prices, isPricesLoading, handleRetire } = useMarketplace(id);
+  const { filteredProjects, loading, handleRetire } = useMarketplace(id);
 
-  const listings: Price[] = useMemo(() => {
-    if (!project) return [];
+  if (loading) return null;
 
-    return prices.filter(
-      (p) => p.type === 'listing' && p.supply > 0 && p.listing?.creditId?.projectId === project.key
-    );
-  }, [prices, project]);
-
-  const displayPrice = useMemo(() => {
-    if (!listings.length) return '—';
-    return Math.min(...listings.map((l) => l.purchasePrice)).toFixed(2);
-  }, [listings]);
+  const project = filteredProjects.find((p): p is SellableProject => p.key === id);
 
   if (!project) return null;
 
   return (
     <ProjectInfo
       project={project}
-      matches={listings}
-      displayPrice={displayPrice}
+      matches={[]}
+      displayPrice={project.minPrice !== undefined ? project.minPrice.toFixed(2) : '—'}
       selectedVintage=""
-      priceParam={displayPrice !== '—' ? displayPrice : null}
+      priceParam={project.minPrice !== undefined ? project.minPrice.toString() : null}
       handleRetire={handleRetire}
-      isPricesLoading={isPricesLoading}
+      isPricesLoading={false}
     />
   );
 }
