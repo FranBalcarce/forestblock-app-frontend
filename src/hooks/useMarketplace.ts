@@ -1,19 +1,35 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 import type { Project } from '@/types/project';
 import type { UseMarketplace, RetireParams, SortBy } from '@/types/marketplace';
 
 /* ---------------------------------------------
+ Types
+--------------------------------------------- */
+
+type ApiArrayResponse<T> = {
+  items?: T[];
+  data?: T[];
+};
+
+/* ---------------------------------------------
  Helpers
 --------------------------------------------- */
 
-function unwrapArray<T>(data: unknown): T[] {
-  if (Array.isArray(data)) return data as T[];
-  if (typeof data === 'object' && data !== null && Array.isArray((data as any).items)) {
-    return (data as any).items as T[];
+function unwrapArray<T>(response: unknown): T[] {
+  if (Array.isArray(response)) {
+    return response;
   }
+
+  if (typeof response === 'object' && response !== null) {
+    const r = response as ApiArrayResponse<T>;
+
+    if (Array.isArray(r.items)) return r.items;
+    if (Array.isArray(r.data)) return r.data;
+  }
+
   return [];
 }
 
@@ -30,37 +46,25 @@ export default function useMarketplace(id?: string): UseMarketplace {
   const [sortBy, setSortBy] = useState<SortBy>('price_asc');
 
   /* ---------------------------------------------
-     FETCH MARKETPLACE (DESDE PRICES)
+     Fetch MARKETPLACE PROJECTS
   --------------------------------------------- */
 
   useEffect(() => {
     async function fetchMarketplace() {
       try {
-        setLoading(true);
-
-        // 🔥 ESTE ES EL ENDPOINT CLAVE
-        const res = await axiosPublicInstance.get('/api/carbon/carbonProjects', {
-          params: {
-            minSupply: 100, // 👈 CLAVE (como dijo Carbonmark)
-          },
-        });
+        const res = await axiosPublicInstance.get('/api/carbon/carbonProjects');
 
         const data = unwrapArray<Project>(res.data);
 
-        // 🟢 solo proyectos vendibles
-        const sellableProjects = data.filter(
-          (p) => typeof p.minPrice === 'number' && p.minPrice > 0
-        );
+        console.log('🟢 RAW PROJECTS:', data.length);
 
-        console.log('🟢 SELLABLE PROJECTS:', sellableProjects.length);
-
-        setProjects(sellableProjects);
+        setProjects(data);
 
         if (id) {
-          setProject(sellableProjects.find((p) => p.key === id) ?? null);
+          setProject(data.find((p) => p.key === id) ?? null);
         }
-      } catch (err) {
-        console.error('❌ Error fetching marketplace', err);
+      } catch (error) {
+        console.error('❌ Error fetching marketplace projects', error);
       } finally {
         setLoading(false);
       }
@@ -70,32 +74,63 @@ export default function useMarketplace(id?: string): UseMarketplace {
   }, [id]);
 
   /* ---------------------------------------------
-     RETIRE
+     FILTER: solo proyectos vendibles
+  --------------------------------------------- */
+
+  const filteredProjects = useMemo(() => {
+    let result = projects.filter((p) => {
+      const hasPrice = typeof p.minPrice === 'number' && p.minPrice > 0;
+      const hasSupply = typeof p.stats?.availableTonnes === 'number' && p.stats.availableTonnes > 0;
+
+      return hasPrice && hasSupply;
+    });
+
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter((p) => p.name.toLowerCase().includes(term));
+    }
+
+    switch (sortBy) {
+      case 'price_asc':
+        result.sort((a, b) => (a.minPrice ?? 0) - (b.minPrice ?? 0));
+        break;
+
+      case 'price_desc':
+        result.sort((a, b) => (b.minPrice ?? 0) - (a.minPrice ?? 0));
+        break;
+    }
+
+    console.log('🟢 SELLABLE PROJECTS:', result.length);
+
+    return result;
+  }, [projects, searchTerm, sortBy]);
+
+  /* ---------------------------------------------
+     Retire
   --------------------------------------------- */
 
   const handleRetire = (params: RetireParams) => {
-    const sp = new URLSearchParams({
-      id: params.id,
-      index: String(params.index),
-      price: params.priceParam,
-      selectedVintage: params.selectedVintage,
-      quantity: String(params.quantity),
-    });
+    const sp = new URLSearchParams();
+    sp.set('id', params.id);
+    sp.set('index', String(params.index));
+    sp.set('price', params.priceParam);
+    sp.set('selectedVintage', params.selectedVintage);
+    sp.set('quantity', String(params.quantity));
 
     window.location.href = `/retireCheckout?${sp.toString()}`;
   };
 
   /* ---------------------------------------------
-     RETURN
+     Return
   --------------------------------------------- */
 
   return {
     projects,
-    filteredProjects: projects, // 👈 requerido por el tipo
+    filteredProjects,
     project,
     loading,
 
-    // filtros (stub)
+    // filtros (placeholder)
     availableCategories: [],
     selectedCountries: [],
     setSelectedCountries: () => {},
