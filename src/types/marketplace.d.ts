@@ -1,71 +1,63 @@
-import type { Project } from './project';
+import type { Project } from '@/types/project';
 
-/* ===================== SORT ===================== */
+/* ---------------------------------------------
+   Sorting
+--------------------------------------------- */
+
 export type SortBy = 'price_asc' | 'price_desc' | 'name_asc' | 'name_desc';
 
-/* ===================== CREDIT ===================== */
-export interface ListingCreditId {
-  standard: string; // VCS, GS, etc
-  projectId: string; // ej: "VCS-191"
-  vintage: number;
-}
+/* ---------------------------------------------
+   Sellable Project (enriquecido)
+--------------------------------------------- */
 
-/* ===================== PRICE (USADO POR MARKETPLACE) ===================== */
-export interface Price {
-  id: string;
-  type: 'listing';
-  purchasePrice: number;
-  supply: number;
+export type SellableProject = Project & {
+  minPrice: number;
+  availableSupply: number;
+};
 
-  /** 🔑 modelo nuevo Carbonmark */
-  creditId: ListingCreditId;
+/* ---------------------------------------------
+   Retire
+--------------------------------------------- */
 
-  /**
-   * 🔁 compatibilidad con UI vieja
-   * (NO se usa para lógica)
-   */
-  listing?: {
-    id: string;
-    creditId: ListingCreditId;
-  };
-}
-
-/* ===================== HOOK ===================== */
-export interface UseMarketplace {
-  filteredProjects: Project[];
-  loading: boolean;
-
-  availableCategories: string[];
-  selectedCountries: string[];
-  setSelectedCountries: React.Dispatch<React.SetStateAction<string[]>>;
-  selectedCategories: string[];
-  setSelectedCategories: React.Dispatch<React.SetStateAction<string[]>>;
-  selectedVintages: string[];
-  setSelectedVintages: React.Dispatch<React.SetStateAction<string[]>>;
-  selectedUNSDG: string[];
-  setSelectedUNSDG: React.Dispatch<React.SetStateAction<string[]>>;
-  searchTerm: string;
-  setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
-  sortBy: SortBy;
-  setSortBy: React.Dispatch<React.SetStateAction<SortBy>>;
-
-  projects: Project[];
-  project: Project | null;
-
-  prices: Price[];
-  isPricesLoading: boolean;
-
-  handleRetire: (params: RetireParams) => void;
-}
-
-/* ===================== RETIRE ===================== */
-export type RetireParams = {
+export interface RetireParams {
   id: string;
   index: number;
   priceParam: string;
   selectedVintage: string;
   quantity: number;
-};
+}
+
+/* ---------------------------------------------
+   Hook return
+--------------------------------------------- */
+
+export interface UseMarketplace {
+  projects: Project[];
+  filteredProjects: SellableProject[];
+  project: Project | null;
+  loading: boolean;
+
+  searchTerm: string;
+  setSearchTerm: (v: string) => void;
+
+  sortBy: SortBy;
+  setSortBy: (v: SortBy) => void;
+
+  availableCategories: string[];
+  selectedCountries: string[];
+  setSelectedCountries: (v: string[]) => void;
+  selectedCategories: string[];
+  setSelectedCategories: (v: string[]) => void;
+  selectedVintages: string[];
+  setSelectedVintages: (v: string[]) => void;
+  selectedUNSDG: string[];
+  setSelectedUNSDG: (v: string[]) => void;
+
+  prices: never[];
+  isPricesLoading: boolean;
+
+  handleRetire: (params: RetireParams) => void;
+}
 
 // import { Project } from './project';
 // export interface Price {

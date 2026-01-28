@@ -3,68 +3,90 @@
 import { useEffect, useMemo, useState } from 'react';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 import type { Project } from '@/types/project';
-import type { UseMarketplace, RetireParams, SortBy } from '@/types/marketplace';
+import type { UseMarketplace, RetireParams, SortBy, SellableProject } from '@/types/marketplace';
 
 /* ---------------------------------------------
- Types
+   Helpers
 --------------------------------------------- */
 
-type ApiArrayResponse<T> = {
-  items?: T[];
-  data?: T[];
-};
+type ApiListResponse<T> = T[] | { items: T[] } | { data: T[] };
 
-/* ---------------------------------------------
- Helpers
---------------------------------------------- */
-
-function unwrapArray<T>(response: unknown): T[] {
-  if (Array.isArray(response)) {
-    return response;
-  }
+function unwrapArray<T>(response: ApiListResponse<T> | unknown): T[] {
+  if (Array.isArray(response)) return response;
 
   if (typeof response === 'object' && response !== null) {
-    const r = response as ApiArrayResponse<T>;
+    if ('items' in response && Array.isArray((response as { items: T[] }).items)) {
+      return (response as { items: T[] }).items;
+    }
 
-    if (Array.isArray(r.items)) return r.items;
-    if (Array.isArray(r.data)) return r.data;
+    if ('data' in response && Array.isArray((response as { data: T[] }).data)) {
+      return (response as { data: T[] }).data;
+    }
   }
 
   return [];
 }
 
 /* ---------------------------------------------
- Hook
+   Hook
 --------------------------------------------- */
 
 export default function useMarketplace(id?: string): UseMarketplace {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [sellableProjects, setSellableProjects] = useState<SellableProject[]>([]);
   const [project, setProject] = useState<Project | null>(null);
-  const [loading, setLoading] = useState(true);
 
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('price_asc');
 
   /* ---------------------------------------------
-     Fetch MARKETPLACE PROJECTS
+     Fetch marketplace (PROJECTS + PRICES)
   --------------------------------------------- */
 
   useEffect(() => {
     async function fetchMarketplace() {
       try {
-        const res = await axiosPublicInstance.get('/api/carbon/carbonProjects');
+        // 1️⃣ Traemos proyectos base
+        const projectRes = await axiosPublicInstance.get('/api/carbon/carbonProjects');
+        const rawProjects = unwrapArray<Project>(projectRes.data);
 
-        const data = unwrapArray<Project>(res.data);
+        console.log('RAW PROJECTS:', rawProjects.length);
 
-        console.log('🟢 RAW PROJECTS:', data.length);
-
-        setProjects(data);
+        setProjects(rawProjects);
 
         if (id) {
-          setProject(data.find((p) => p.key === id) ?? null);
+          setProject(rawProjects.find((p) => p.key === id) ?? null);
         }
-      } catch (error) {
-        console.error('❌ Error fetching marketplace projects', error);
+
+        // 2️⃣ Para cada proyecto pedimos precios con supply > 0
+        const enriched: SellableProject[] = [];
+
+        for (const project of rawProjects) {
+          const pricesRes = await axiosPublicInstance.get(
+            `/api/carbon/prices?projectIds=${project.projectID}&minSupply=1`
+          );
+
+          const listings = unwrapArray<{
+            price: number;
+            supply: number;
+          }>(pricesRes.data);
+
+          if (!listings.length) continue;
+
+          const cheapest = listings.reduce((a, b) => (b.price < a.price ? b : a));
+
+          enriched.push({
+            ...project,
+            minPrice: cheapest.price,
+            availableSupply: cheapest.supply,
+          });
+        }
+
+        console.log('SELLABLE PROJECTS:', enriched.length);
+        setSellableProjects(enriched);
+      } catch (err) {
+        console.error('❌ Error fetching marketplace', err);
       } finally {
         setLoading(false);
       }
@@ -74,36 +96,34 @@ export default function useMarketplace(id?: string): UseMarketplace {
   }, [id]);
 
   /* ---------------------------------------------
-     FILTER: solo proyectos vendibles
+     Filtering + Sorting
   --------------------------------------------- */
 
   const filteredProjects = useMemo(() => {
-    let result = projects.filter((p) => {
-      const hasPrice = typeof p.minPrice === 'number' && p.minPrice > 0;
-      const hasSupply = typeof p.stats?.availableTonnes === 'number' && p.stats.availableTonnes > 0;
-
-      return hasPrice && hasSupply;
-    });
+    let result = [...sellableProjects];
 
     if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter((p) => p.name.toLowerCase().includes(term));
+      const q = searchTerm.toLowerCase();
+      result = result.filter((p) => p.name.toLowerCase().includes(q));
     }
 
     switch (sortBy) {
       case 'price_asc':
-        result.sort((a, b) => (a.minPrice ?? 0) - (b.minPrice ?? 0));
+        result.sort((a, b) => a.minPrice - b.minPrice);
         break;
-
       case 'price_desc':
-        result.sort((a, b) => (b.minPrice ?? 0) - (a.minPrice ?? 0));
+        result.sort((a, b) => b.minPrice - a.minPrice);
+        break;
+      case 'name_asc':
+        result.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case 'name_desc':
+        result.sort((a, b) => b.name.localeCompare(a.name));
         break;
     }
 
-    console.log('🟢 SELLABLE PROJECTS:', result.length);
-
     return result;
-  }, [projects, searchTerm, sortBy]);
+  }, [sellableProjects, searchTerm, sortBy]);
 
   /* ---------------------------------------------
      Retire
@@ -130,7 +150,11 @@ export default function useMarketplace(id?: string): UseMarketplace {
     project,
     loading,
 
-    // filtros (placeholder)
+    searchTerm,
+    setSearchTerm,
+    sortBy,
+    setSortBy,
+
     availableCategories: [],
     selectedCountries: [],
     setSelectedCountries: () => {},
@@ -140,11 +164,6 @@ export default function useMarketplace(id?: string): UseMarketplace {
     setSelectedVintages: () => {},
     selectedUNSDG: [],
     setSelectedUNSDG: () => {},
-
-    searchTerm,
-    setSearchTerm,
-    sortBy,
-    setSortBy,
 
     prices: [],
     isPricesLoading: false,
