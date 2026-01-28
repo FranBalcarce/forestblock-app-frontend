@@ -1,7 +1,7 @@
 import type { Project } from './project';
 
 /* ===================== SORT ===================== */
-export type SortBy = 'price_asc' | 'price_desc' | 'recently_updated' | 'newest' | 'oldest' | 'name';
+export type SortBy = 'price_asc' | 'price_desc' | 'name_asc' | 'name_desc';
 
 /* ===================== CREDIT ===================== */
 export interface ListingCreditId {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 import { Project } from '@/types/project';
 import { UseMarketplace, RetireParams, SortBy } from '@/types/marketplace';
@@ -44,16 +44,21 @@ export default function useMarketplace(id?: string): UseMarketplace {
     async function fetchMarketplace() {
       try {
         const res = await axiosPublicInstance.get('/api/carbon/carbonProjects');
-
         const data = unwrapArray<Project>(res.data);
 
-        console.log('🟢 MARKETPLACE PROJECTS:', data.length);
-        console.log('🟢 FIRST PROJECT:', data[0]);
+        console.log('🟢 RAW PROJECTS:', data.length);
 
-        setProjects(data);
+        // 🔥 SOLO proyectos con precio real
+        const sellableProjects = data.filter(
+          (p) => typeof p.minPrice === 'number' && p.minPrice > 0 && p.hasSupply !== false
+        );
+
+        console.log('🟢 SELLABLE PROJECTS:', sellableProjects.length);
+
+        setProjects(sellableProjects);
 
         if (id) {
-          setProject(data.find((p) => p.key === id) ?? null);
+          setProject(sellableProjects.find((p) => p.key === id) ?? null);
         }
       } catch (err) {
         console.error('❌ Error fetching marketplace projects', err);
@@ -64,6 +69,46 @@ export default function useMarketplace(id?: string): UseMarketplace {
 
     fetchMarketplace();
   }, [id]);
+
+  /* ---------------------------------------------
+     Filter + Search + Sort
+  --------------------------------------------- */
+
+  const filteredProjects = useMemo(() => {
+    let result = [...projects];
+
+    // 🔍 Search
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.name.toLowerCase().includes(term) ||
+          p.country?.toLowerCase().includes(term) ||
+          p.registry?.toLowerCase().includes(term)
+      );
+    }
+
+    // 🔃 Sort
+    switch (sortBy) {
+      case 'price_asc':
+        result.sort((a, b) => (a.minPrice ?? 0) - (b.minPrice ?? 0));
+        break;
+
+      case 'price_desc':
+        result.sort((a, b) => (b.minPrice ?? 0) - (a.minPrice ?? 0));
+        break;
+
+      case 'name_asc':
+        result.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+
+      case 'name_desc':
+        result.sort((a, b) => b.name.localeCompare(a.name));
+        break;
+    }
+
+    return result;
+  }, [projects, searchTerm, sortBy]);
 
   /* ---------------------------------------------
      Retire
@@ -85,13 +130,15 @@ export default function useMarketplace(id?: string): UseMarketplace {
   --------------------------------------------- */
 
   return {
-    // 🔥 USAR DIRECTAMENTE ESTOS
-    filteredProjects: projects,
+    // 🔥 ESTE es el que debe usar la UI
+    filteredProjects,
+
+    // por compatibilidad
     projects,
     project,
     loading,
 
-    // filtros (los podés implementar después)
+    // filtros (los implementás después)
     availableCategories: [],
     selectedCountries: [],
     setSelectedCountries: () => {},
@@ -107,7 +154,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
     sortBy,
     setSortBy,
 
-    prices: [], // ❌ ya no se usan en frontend
+    prices: [],
     isPricesLoading: false,
 
     handleRetire,
