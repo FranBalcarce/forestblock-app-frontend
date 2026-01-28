@@ -2,25 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
-import { Project } from '@/types/project';
-import { UseMarketplace, RetireParams, SortBy } from '@/types/marketplace';
+import type { Project } from '@/types/project';
+import type { UseMarketplace, RetireParams, SortBy } from '@/types/marketplace';
 
 /* ---------------------------------------------
  Helpers
 --------------------------------------------- */
 
-type UnknownRecord = Record<string, unknown>;
-
-const isRecord = (v: unknown): v is UnknownRecord => typeof v === 'object' && v !== null;
-
 function unwrapArray<T>(data: unknown): T[] {
   if (Array.isArray(data)) return data as T[];
-
-  if (isRecord(data)) {
-    if (Array.isArray(data.items)) return data.items as T[];
-    if (Array.isArray(data.data)) return data.data as T[];
+  if (typeof data === 'object' && data !== null && Array.isArray((data as any).items)) {
+    return (data as any).items as T[];
   }
-
   return [];
 }
 
@@ -31,32 +24,43 @@ function unwrapArray<T>(data: unknown): T[] {
 export default function useMarketplace(id?: string): UseMarketplace {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
-
   const [loading, setLoading] = useState(true);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('price_asc');
 
   /* ---------------------------------------------
-     Fetch MARKETPLACE PROJECTS
+     FETCH MARKETPLACE (DESDE PRICES)
   --------------------------------------------- */
 
   useEffect(() => {
     async function fetchMarketplace() {
       try {
-        const res = await axiosPublicInstance.get('/api/carbon/carbonProjects');
+        setLoading(true);
+
+        // 🔥 ESTE ES EL ENDPOINT CLAVE
+        const res = await axiosPublicInstance.get('/api/carbon/carbonProjects', {
+          params: {
+            minSupply: 100, // 👈 CLAVE (como dijo Carbonmark)
+          },
+        });
 
         const data = unwrapArray<Project>(res.data);
 
-        console.log('🟢 RAW PROJECTS:', data.length);
-        console.log('🟢 FIRST PROJECT:', data[0]);
+        // 🟢 solo proyectos vendibles
+        const sellableProjects = data.filter(
+          (p) => typeof p.minPrice === 'number' && p.minPrice > 0
+        );
 
-        setProjects(data);
+        console.log('🟢 SELLABLE PROJECTS:', sellableProjects.length);
+
+        setProjects(sellableProjects);
 
         if (id) {
-          setProject(data.find((p) => p.key === id) ?? null);
+          setProject(sellableProjects.find((p) => p.key === id) ?? null);
         }
       } catch (err) {
-        console.error('❌ Error fetching marketplace projects', err);
+        console.error('❌ Error fetching marketplace', err);
       } finally {
         setLoading(false);
       }
@@ -66,31 +70,32 @@ export default function useMarketplace(id?: string): UseMarketplace {
   }, [id]);
 
   /* ---------------------------------------------
-     Retire
+     RETIRE
   --------------------------------------------- */
 
   const handleRetire = (params: RetireParams) => {
-    const sp = new URLSearchParams();
-    sp.set('id', params.id);
-    sp.set('index', String(params.index));
-    sp.set('price', params.priceParam);
-    sp.set('selectedVintage', params.selectedVintage);
-    sp.set('quantity', String(params.quantity));
+    const sp = new URLSearchParams({
+      id: params.id,
+      index: String(params.index),
+      price: params.priceParam,
+      selectedVintage: params.selectedVintage,
+      quantity: String(params.quantity),
+    });
 
     window.location.href = `/retireCheckout?${sp.toString()}`;
   };
 
   /* ---------------------------------------------
-     Return
+     RETURN
   --------------------------------------------- */
-  const filteredProjects = projects;
 
   return {
-    filteredProjects, // ✅ requerido por UseMarketplace
     projects,
+    filteredProjects: projects, // 👈 requerido por el tipo
     project,
     loading,
 
+    // filtros (stub)
     availableCategories: [],
     selectedCountries: [],
     setSelectedCountries: () => {},
