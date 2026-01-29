@@ -14,15 +14,8 @@ type ApiListResponse<T> = T[] | { items: T[] } | { data: T[] };
 
 function unwrapArray<T>(response: ApiListResponse<T>): T[] {
   if (Array.isArray(response)) return response;
-
-  if ('items' in response && Array.isArray(response.items)) {
-    return response.items;
-  }
-
-  if ('data' in response && Array.isArray(response.data)) {
-    return response.data;
-  }
-
+  if ('items' in response && Array.isArray(response.items)) return response.items;
+  if ('data' in response && Array.isArray(response.data)) return response.data;
   return [];
 }
 
@@ -46,26 +39,34 @@ export default function useMarketplace(id?: string): UseMarketplace {
       setLoading(true);
 
       try {
-        // 1️⃣ Proyectos base
+        /* 1️⃣ Traer proyectos base */
         const projectRes = await axiosPublicInstance.get<ApiListResponse<Project>>(
           '/api/carbon/carbonProjects'
         );
 
         const rawProjects = unwrapArray(projectRes.data);
-
         if (!mounted) return;
+
         setProjects(rawProjects);
 
-        // 2️⃣ Enriquecemos SOLO con proyectos que tienen listings con stock
+        /* 2️⃣ Enriquecer SOLO proyectos con listings */
         const enriched = (
           await Promise.all(
             rawProjects.map(async (project) => {
+              // ⛔ CLAVE: usar el projectId REAL (ej: VCS-1205)
+              const projectId = project.projectID;
+
+              if (!projectId) return null;
+
               try {
                 const pricesRes = await axiosPublicInstance.get<
-                  ApiListResponse<{ price: number; supply: number }>
+                  ApiListResponse<{
+                    purchasePrice: number;
+                    supply: number;
+                  }>
                 >('/api/carbon/prices', {
                   params: {
-                    projectIds: project.projectID ?? project.key,
+                    projectIds: projectId,
                     minSupply: 1,
                   },
                 });
@@ -74,11 +75,13 @@ export default function useMarketplace(id?: string): UseMarketplace {
 
                 if (!listings.length) return null;
 
-                const cheapest = listings.reduce((a, b) => (b.price < a.price ? b : a));
+                const cheapest = listings.reduce((a, b) =>
+                  b.purchasePrice < a.purchasePrice ? b : a
+                );
 
                 return {
                   ...project,
-                  minPrice: cheapest.price,
+                  minPrice: cheapest.purchasePrice,
                   availableSupply: cheapest.supply,
                 } satisfies SellableProject;
               } catch {
@@ -92,6 +95,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
 
         setSellableProjects(enriched);
 
+        /* 3️⃣ Detalle por ID */
         if (id) {
           setProject(enriched.find((p) => p.key === id) ?? null);
         }
@@ -103,7 +107,6 @@ export default function useMarketplace(id?: string): UseMarketplace {
     }
 
     fetchMarketplace();
-
     return () => {
       mounted = false;
     };
@@ -166,7 +169,6 @@ export default function useMarketplace(id?: string): UseMarketplace {
     sortBy,
     setSortBy,
 
-    // filtros (placeholder)
     availableCategories: [],
     selectedCountries: [],
     setSelectedCountries: () => {},
