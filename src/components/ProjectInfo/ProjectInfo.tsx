@@ -8,7 +8,7 @@ import MapView from './MapView';
 import Button from '@/components/Marketplace/Button';
 
 import type { Project } from '@/types/project';
-import type { Price, RetireParams } from '@/types/marketplace';
+import type { RetireParams } from '@/types/marketplace';
 
 /* ---------------------------------------------
    Helpers
@@ -42,10 +42,7 @@ const getImageUrl = (img: unknown): string | null => {
 
 type Props = {
   project: Project;
-  matches: Price[];
-  displayPrice: string | null;
   selectedVintage: string;
-  priceParam: string | null;
   isPricesLoading: boolean;
   handleRetire: (params: RetireParams) => void;
 };
@@ -56,10 +53,7 @@ type Props = {
 
 export default function ProjectInfo({
   project,
-  matches,
-  displayPrice,
   selectedVintage,
-  priceParam,
   isPricesLoading,
   handleRetire,
 }: Props) {
@@ -88,19 +82,19 @@ export default function ProjectInfo({
     return [lat, lng];
   }, [project]);
 
-  /* ---------- Estado compra ---------- */
-  const canBuy = !isPricesLoading && matches.length > 0;
+  /* ---------- Precio ---------- */
+  const displayPrice = project.minPrice !== undefined ? project.minPrice.toFixed(2) : null;
 
+  const canBuy = !isPricesLoading && project.minPrice !== undefined;
+
+  /* ---------- Comprar ---------- */
   const onBuy = () => {
-    const first = matches[0];
-
-    const effectivePrice =
-      priceParam ?? (first?.purchasePrice != null ? String(first.purchasePrice) : '');
+    if (project.minPrice === undefined) return;
 
     handleRetire({
       id: project.key,
       index: 0,
-      priceParam: effectivePrice,
+      priceParam: project.minPrice.toString(),
       selectedVintage,
       quantity,
     });
