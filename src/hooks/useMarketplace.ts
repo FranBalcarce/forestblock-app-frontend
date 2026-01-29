@@ -12,17 +12,15 @@ import type { UseMarketplace, RetireParams, SortBy, SellableProject } from '@/ty
 
 type ApiListResponse<T> = T[] | { items: T[] } | { data: T[] };
 
-function unwrapArray<T>(response: ApiListResponse<T> | unknown): T[] {
+function unwrapArray<T>(response: ApiListResponse<T>): T[] {
   if (Array.isArray(response)) return response;
 
-  if (typeof response === 'object' && response !== null) {
-    if ('items' in response && Array.isArray((response as any).items)) {
-      return (response as any).items;
-    }
+  if ('items' in response && Array.isArray(response.items)) {
+    return response.items;
+  }
 
-    if ('data' in response && Array.isArray((response as any).data)) {
-      return (response as any).data;
-    }
+  if ('data' in response && Array.isArray(response.data)) {
+    return response.data;
   }
 
   return [];
@@ -37,13 +35,9 @@ export default function useMarketplace(id?: string): UseMarketplace {
   const [sellableProjects, setSellableProjects] = useState<SellableProject[]>([]);
   const [project, setProject] = useState<SellableProject | null>(null);
 
-  const [loading, setLoading] = useState<boolean>(true);
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('price_asc');
-
-  /* ---------------------------------------------
-     Fetch marketplace
-  --------------------------------------------- */
 
   useEffect(() => {
     let mounted = true;
@@ -52,30 +46,31 @@ export default function useMarketplace(id?: string): UseMarketplace {
       setLoading(true);
 
       try {
-        // 1️⃣ Traemos proyectos base
-        const projectRes = await axiosPublicInstance.get('/api/carbon/carbonProjects');
-        const rawProjects = unwrapArray<Project>(projectRes.data);
+        // 1️⃣ Proyectos base
+        const projectRes = await axiosPublicInstance.get<ApiListResponse<Project>>(
+          '/api/carbon/carbonProjects'
+        );
+
+        const rawProjects = unwrapArray(projectRes.data);
 
         if (!mounted) return;
-
         setProjects(rawProjects);
 
-        // 2️⃣ Pedimos precios en paralelo
+        // 2️⃣ Enriquecemos SOLO con proyectos que tienen listings con stock
         const enriched = (
           await Promise.all(
             rawProjects.map(async (project) => {
               try {
-                const pricesRes = await axiosPublicInstance.get(`/api/carbon/prices`, {
+                const pricesRes = await axiosPublicInstance.get<
+                  ApiListResponse<{ price: number; supply: number }>
+                >('/api/carbon/prices', {
                   params: {
                     projectIds: project.projectID ?? project.key,
                     minSupply: 1,
                   },
                 });
 
-                const listings = unwrapArray<{
-                  price: number;
-                  supply: number;
-                }>(pricesRes.data);
+                const listings = unwrapArray(pricesRes.data);
 
                 if (!listings.length) return null;
 
@@ -91,13 +86,12 @@ export default function useMarketplace(id?: string): UseMarketplace {
               }
             })
           )
-        ).filter(Boolean) as SellableProject[];
+        ).filter((p): p is SellableProject => p !== null);
 
         if (!mounted) return;
 
         setSellableProjects(enriched);
 
-        // 3️⃣ Proyecto por ID (detalle)
         if (id) {
           setProject(enriched.find((p) => p.key === id) ?? null);
         }
@@ -150,19 +144,16 @@ export default function useMarketplace(id?: string): UseMarketplace {
   --------------------------------------------- */
 
   const handleRetire = (params: RetireParams) => {
-    const sp = new URLSearchParams();
-    sp.set('id', params.id);
-    sp.set('index', String(params.index));
-    sp.set('price', params.priceParam);
-    sp.set('selectedVintage', params.selectedVintage);
-    sp.set('quantity', String(params.quantity));
+    const sp = new URLSearchParams({
+      id: params.id,
+      index: String(params.index),
+      price: params.priceParam,
+      selectedVintage: params.selectedVintage,
+      quantity: String(params.quantity),
+    });
 
     window.location.href = `/retireCheckout?${sp.toString()}`;
   };
-
-  /* ---------------------------------------------
-     Return
-  --------------------------------------------- */
 
   return {
     projects,
@@ -175,7 +166,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
     sortBy,
     setSortBy,
 
-    // filtros (por ahora no activos)
+    // filtros (placeholder)
     availableCategories: [],
     selectedCountries: [],
     setSelectedCountries: () => {},
@@ -186,7 +177,6 @@ export default function useMarketplace(id?: string): UseMarketplace {
     selectedUNSDG: [],
     setSelectedUNSDG: () => {},
 
-    // legacy (ya no usados)
     prices: [],
     isPricesLoading: false,
 
