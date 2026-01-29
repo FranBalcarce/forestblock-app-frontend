@@ -8,12 +8,9 @@ type Props = {
 };
 
 export default function MarketplaceByIdClient({ id }: Props) {
-  const { filteredProjects, loading, handleRetire } = useMarketplace(id);
+  const { project, loading, handleRetire } = useMarketplace(id);
 
   if (loading) return null;
-
-  const project = filteredProjects.find((p) => p.key === id);
-
   if (!project) return null;
 
   return (

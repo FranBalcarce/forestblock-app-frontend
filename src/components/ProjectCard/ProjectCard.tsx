@@ -1,6 +1,6 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import type { Project } from '@/types/project';
+import type { SellableProject } from '@/types/marketplace';
 
 import BackgroundImage from './BackgroundImage';
 import OverlayContent from './OverlayContent';
@@ -8,24 +8,22 @@ import { formatVintages } from '@/utils/formatVintages';
 import { getProjectImage } from '@/utils/getProjectImage';
 
 interface ProjectCardProps {
-  project: Project;
-  actionRenderer?: (project: Project) => React.ReactNode;
+  project: SellableProject;
+  actionRenderer?: (project: SellableProject) => React.ReactNode;
 }
 
 export default function ProjectCard({ project, actionRenderer }: ProjectCardProps) {
   const router = useRouter();
 
-  const isDevProject = project.key?.startsWith('nf-');
-
   const handlePurchase = () => {
-    router.push(isDevProject ? `/new-feature/${project.key}` : `/marketplace/${project.key}`);
+    router.push(`/marketplace/${project.key}`);
   };
 
   const projectImage = getProjectImage(project) ?? '/placeholder.jpg';
   const vintages = formatVintages(project.vintages ?? []);
 
   return (
-    <div className="relative bg-white rounded-xl overflow-hidden shadow-md text-center transition-transform hover:scale-105 hover:shadow-lg h-[300px] sm:h-[360px] lg:h-[320px]">
+    <div className="relative bg-white rounded-xl overflow-hidden shadow-md text-center transition-transform hover:scale-105 hover:shadow-lg h-[320px]">
       <BackgroundImage imageUrl={projectImage} />
 
       <OverlayContent
@@ -33,7 +31,7 @@ export default function ProjectCard({ project, actionRenderer }: ProjectCardProp
         country={project.country ?? '—'}
         category={project.methodologies?.[0]?.category ?? '—'}
         name={project.name}
-        price={project.displayPrice ?? '—'}
+        price={project.displayPrice}
         onPurchase={handlePurchase}
         sdgs={project.sustainableDevelopmentGoals?.length ?? 0}
         sdgsArray={project.sustainableDevelopmentGoals ?? []}

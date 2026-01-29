@@ -7,16 +7,16 @@ import MapView from '../ProjectInfo/MapView';
 import { useGallery } from '@/hooks/useGallery';
 import { FiFilter } from 'react-icons/fi';
 
-import type { Project, Image as ProjectImage } from '@/types/project';
-import type { SortBy } from '@/types/marketplace';
+import type { Image as ProjectImage } from '@/types/project';
+import type { SortBy, SellableProject } from '@/types/marketplace';
 
 interface ProjectListProps {
   loading: boolean;
-  projects: Project[];
+  projects: SellableProject[];
   sortBy: SortBy;
   setSortBy: (value: SortBy) => void;
   openFilters: () => void;
-  actionRenderer?: (project: Project) => React.ReactNode;
+  actionRenderer?: (project: SellableProject) => React.ReactNode;
 }
 
 const ProjectList: React.FC<ProjectListProps> = ({
@@ -31,11 +31,15 @@ const ProjectList: React.FC<ProjectListProps> = ({
 
   const galleryImages: ProjectImage[] = projects
     .map((p) => p.images?.[0])
-    .filter((img): img is ProjectImage => Boolean(img));
+    .filter((img): img is ProjectImage => img !== undefined);
 
   const { customIcon } = useGallery({ images: galleryImages });
 
   if (loading) return <SkeletonLoader />;
+
+  if (!projects.length) {
+    return <p className="text-center text-gray-500">No hay proyectos disponibles</p>;
+  }
 
   return (
     <div className="flex flex-1 flex-col">
@@ -65,12 +69,12 @@ const ProjectList: React.FC<ProjectListProps> = ({
           <MapView
             projectLocations={projects
               .filter((p) => p.location?.geometry?.coordinates)
-              .map((project) => ({
+              .map((p) => ({
                 coordinates: [
-                  project.location!.geometry!.coordinates[1],
-                  project.location!.geometry!.coordinates[0],
-                ] as [number, number],
-                name: project.name,
+                  p.location!.geometry!.coordinates[1],
+                  p.location!.geometry!.coordinates[0],
+                ],
+                name: p.name,
               }))}
             customIcon={customIcon}
           />
