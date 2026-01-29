@@ -7,15 +7,14 @@ import MapView from '../ProjectInfo/MapView';
 import { useGallery } from '@/hooks/useGallery';
 import { FiFilter } from 'react-icons/fi';
 
-import type { Project } from '@/types/project';
+import type { Project, Image as ProjectImage } from '@/types/project';
 import type { SortBy } from '@/types/marketplace';
-import type { Image as ProjectImage } from '@/types/project'; // 👈 alias CLAVE
 
 interface ProjectListProps {
   loading: boolean;
   projects: Project[];
   sortBy: SortBy;
-  setSortBy: React.Dispatch<React.SetStateAction<SortBy>>;
+  setSortBy: (value: SortBy) => void;
   openFilters: () => void;
   actionRenderer?: (project: Project) => React.ReactNode;
 }
@@ -30,7 +29,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
 }) => {
   const [currentView, setCurrentView] = useState<'grid' | 'list' | 'map'>('grid');
 
-  /* ✅ normalizamos imágenes para el mapa */
+  /* normalizamos imágenes para el mapa */
   const galleryImages: ProjectImage[] = projects
     .map((p) => p.images?.[0])
     .filter((img): img is ProjectImage => Boolean(img));
@@ -39,7 +38,6 @@ const ProjectList: React.FC<ProjectListProps> = ({
     images: galleryImages,
   });
 
-  /* ✅ handlers EXPLÍCITOS (clave para TS) */
   const handleSortChange = (value: SortBy) => {
     setSortBy(value);
   };
@@ -88,8 +86,8 @@ const ProjectList: React.FC<ProjectListProps> = ({
               .filter((p) => p.location?.geometry?.coordinates)
               .map((project) => ({
                 coordinates: [
-                  project.location.geometry.coordinates[1],
-                  project.location.geometry.coordinates[0],
+                  project.location!.geometry!.coordinates[1],
+                  project.location!.geometry!.coordinates[0],
                 ] as [number, number],
                 name: project.name,
               }))}
