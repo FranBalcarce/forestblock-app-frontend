@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
+
 import type { Project } from '@/types/project';
 import type { UseMarketplace, RetireParams, SortBy, SellableProject } from '@/types/marketplace';
 
@@ -15,12 +16,12 @@ function unwrapArray<T>(response: ApiListResponse<T> | unknown): T[] {
   if (Array.isArray(response)) return response;
 
   if (typeof response === 'object' && response !== null) {
-    if ('items' in response && Array.isArray((response as { items: T[] }).items)) {
-      return (response as { items: T[] }).items;
+    if ('items' in response && Array.isArray((response as any).items)) {
+      return (response as any).items;
     }
 
-    if ('data' in response && Array.isArray((response as { data: T[] }).data)) {
-      return (response as { data: T[] }).data;
+    if ('data' in response && Array.isArray((response as any).data)) {
+      return (response as any).data;
     }
   }
 
@@ -34,65 +35,84 @@ function unwrapArray<T>(response: ApiListResponse<T> | unknown): T[] {
 export default function useMarketplace(id?: string): UseMarketplace {
   const [projects, setProjects] = useState<Project[]>([]);
   const [sellableProjects, setSellableProjects] = useState<SellableProject[]>([]);
-  const [project, setProject] = useState<Project | null>(null);
+  const [project, setProject] = useState<SellableProject | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortBy>('price_asc');
 
   /* ---------------------------------------------
-     Fetch marketplace (PROJECTS + PRICES)
+     Fetch marketplace
   --------------------------------------------- */
 
   useEffect(() => {
+    let mounted = true;
+
     async function fetchMarketplace() {
+      setLoading(true);
+
       try {
         // 1️⃣ Traemos proyectos base
         const projectRes = await axiosPublicInstance.get('/api/carbon/carbonProjects');
         const rawProjects = unwrapArray<Project>(projectRes.data);
 
-        console.log('RAW PROJECTS:', rawProjects.length);
+        if (!mounted) return;
 
         setProjects(rawProjects);
 
-        if (id) {
-          setProject(rawProjects.find((p) => p.key === id) ?? null);
-        }
+        // 2️⃣ Pedimos precios en paralelo
+        const enriched = (
+          await Promise.all(
+            rawProjects.map(async (project) => {
+              try {
+                const pricesRes = await axiosPublicInstance.get(`/api/carbon/prices`, {
+                  params: {
+                    projectIds: project.projectID ?? project.key,
+                    minSupply: 1,
+                  },
+                });
 
-        // 2️⃣ Para cada proyecto pedimos precios con supply > 0
-        const enriched: SellableProject[] = [];
+                const listings = unwrapArray<{
+                  price: number;
+                  supply: number;
+                }>(pricesRes.data);
 
-        for (const project of rawProjects) {
-          const pricesRes = await axiosPublicInstance.get(
-            `/api/carbon/prices?projectIds=${project.projectID}&minSupply=1`
-          );
+                if (!listings.length) return null;
 
-          const listings = unwrapArray<{
-            price: number;
-            supply: number;
-          }>(pricesRes.data);
+                const cheapest = listings.reduce((a, b) => (b.price < a.price ? b : a));
 
-          if (!listings.length) continue;
+                return {
+                  ...project,
+                  minPrice: cheapest.price,
+                  availableSupply: cheapest.supply,
+                } satisfies SellableProject;
+              } catch {
+                return null;
+              }
+            })
+          )
+        ).filter(Boolean) as SellableProject[];
 
-          const cheapest = listings.reduce((a, b) => (b.price < a.price ? b : a));
+        if (!mounted) return;
 
-          enriched.push({
-            ...project,
-            minPrice: cheapest.price,
-            availableSupply: cheapest.supply,
-          });
-        }
-
-        console.log('SELLABLE PROJECTS:', enriched.length);
         setSellableProjects(enriched);
+
+        // 3️⃣ Proyecto por ID (detalle)
+        if (id) {
+          setProject(enriched.find((p) => p.key === id) ?? null);
+        }
       } catch (err) {
         console.error('❌ Error fetching marketplace', err);
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     }
 
     fetchMarketplace();
+
+    return () => {
+      mounted = false;
+    };
   }, [id]);
 
   /* ---------------------------------------------
@@ -155,6 +175,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
     sortBy,
     setSortBy,
 
+    // filtros (por ahora no activos)
     availableCategories: [],
     selectedCountries: [],
     setSelectedCountries: () => {},
@@ -165,6 +186,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
     selectedUNSDG: [],
     setSelectedUNSDG: () => {},
 
+    // legacy (ya no usados)
     prices: [],
     isPricesLoading: false,
 
