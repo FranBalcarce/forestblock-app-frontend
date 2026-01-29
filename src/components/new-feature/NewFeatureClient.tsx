@@ -2,10 +2,9 @@
 
 import React, { useMemo, useState } from 'react';
 import type { Project } from '@/types/project';
-import type { SortBy } from '@/types/marketplace';
 
 import Header from '@/components/new-feature/header';
-import DevProjectCard from '@/components/new-feature/DevProjectCard';
+import ProjectCard from '@/components/ProjectCard/ProjectCard';
 
 import { DEV_PROJECTS } from '@/data/devProjects';
 import { toMarketplaceProject } from '@/utils/toMarketplaceProject';
@@ -14,7 +13,6 @@ import { toMarketplaceProject } from '@/utils/toMarketplaceProject';
 
 const NewFeatureClient: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy] = useState<SortBy>('price_desc'); // solo para compatibilidad visual
   const [loading] = useState(false);
 
   // filtros
@@ -27,6 +25,7 @@ const NewFeatureClient: React.FC = () => {
 
   // valores únicos
   const countries = useMemo(() => Array.from(new Set(DEV_PROJECTS.map((p) => p.country))), []);
+
   const years = useMemo(
     () => Array.from(new Set(DEV_PROJECTS.map((p) => p.year))).sort((a, b) => b - a),
     []
@@ -44,16 +43,16 @@ const NewFeatureClient: React.FC = () => {
         p.stage.toLowerCase().includes(t);
 
       return (
+        matchesSearch &&
         (faseFilter === 'todas' || p.stage === faseFilter) &&
         (tipoFilter === 'todos' || p.tipo === tipoFilter) &&
         (countryFilter === 'todos' || p.country === countryFilter) &&
-        (yearFilter === 'todos' || p.year === yearFilter) &&
-        matchesSearch
+        (yearFilter === 'todos' || p.year === yearFilter)
       );
     });
   }, [searchTerm, faseFilter, tipoFilter, countryFilter, yearFilter]);
 
-  // adaptar a Project (sin precio)
+  // adaptar a Project del marketplace (sin precio real)
   const projects: Project[] = useMemo(() => filteredDev.map(toMarketplaceProject), [filteredDev]);
 
   return (
@@ -129,7 +128,7 @@ const NewFeatureClient: React.FC = () => {
           )}
 
           {projects.map((project) => (
-            <DevProjectCard key={project.key} project={project} />
+            <ProjectCard key={project.key} project={project} />
           ))}
         </div>
       </div>
