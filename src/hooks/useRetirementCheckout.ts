@@ -10,10 +10,24 @@ import { useAuth } from '@/context/AuthContext';
 
 import { PRICE_MULTIPLIER } from '@/constants';
 
-import type { Price } from '@/types/marketplace';
-
 import axiosInstance from '@/utils/axios/axiosInstance';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
+
+/* ------------------------------------------------------------------ */
+/* Types                                                               */
+/* ------------------------------------------------------------------ */
+
+type Listing = {
+  purchasePrice: number;
+  supply?: number;
+  listing?: {
+    id?: string;
+    creditId?: {
+      projectId?: string;
+      vintage?: number;
+    };
+  };
+};
 
 /* ------------------------------------------------------------------ */
 /* helpers seguros                                                     */
@@ -42,7 +56,7 @@ export const useRetireCheckout = (index?: string | null) => {
   const { user } = useAuth();
   const { tonnesToRetire, setTonnesToRetire, project, setProject, setTotalSupply } = useRetire();
 
-  const [listing, setListing] = useState<Price | null>(null);
+  const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,7 +78,7 @@ export const useRetireCheckout = (index?: string | null) => {
           paramsSerializer: (params) => qs.stringify(params, { arrayFormat: 'repeat' }),
         });
 
-        const prices = unwrapArray<Price>(response.data);
+        const prices = unwrapArray<Listing>(response.data);
 
         const targetFinal = Number(priceParam);
         const targetRaw = targetFinal / PRICE_MULTIPLIER;
