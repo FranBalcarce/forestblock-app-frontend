@@ -2,41 +2,37 @@
 
 import React, { useMemo, useState } from 'react';
 import type { Project } from '@/types/project';
-import type { SortBy } from '@/types/marketplace'; // ✅ TIPO CORRECTO
+import type { SortBy } from '@/types/marketplace';
 
 import Header from '@/components/new-feature/header';
-import dynamic from 'next/dynamic';
+import DevProjectCard from '@/components/new-feature/DevProjectCard';
 
 import { DEV_PROJECTS } from '@/data/devProjects';
 import { toMarketplaceProject } from '@/utils/toMarketplaceProject';
 
-// 👇 ProjectList solo en cliente
-const ProjectList = dynamic(() => import('@/components/Marketplace/ProjectList'), { ssr: false });
+/* ------------------------------------------------ */
 
 const NewFeatureClient: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<SortBy>('price_desc'); // ✅ FIX CLAVE
-  const [loading] = useState<boolean>(false);
+  const [sortBy] = useState<SortBy>('price_desc'); // solo para compatibilidad visual
+  const [loading] = useState(false);
 
-  // 🔹 filtros
+  // filtros
   const [faseFilter, setFaseFilter] = useState<'todas' | 'Piloto' | 'Fase 1'>('todas');
-
   const [tipoFilter, setTipoFilter] = useState<'todos' | 'Forestry' | 'Eficiencia energética'>(
     'todos'
   );
-
   const [countryFilter, setCountryFilter] = useState<'todos' | string>('todos');
   const [yearFilter, setYearFilter] = useState<'todos' | number>('todos');
 
-  // 🔹 valores únicos
+  // valores únicos
   const countries = useMemo(() => Array.from(new Set(DEV_PROJECTS.map((p) => p.country))), []);
-
   const years = useMemo(
     () => Array.from(new Set(DEV_PROJECTS.map((p) => p.year))).sort((a, b) => b - a),
     []
   );
 
-  // 🔹 filtrado principal
+  // filtrado
   const filteredDev = useMemo(() => {
     const t = searchTerm.trim().toLowerCase();
 
@@ -47,20 +43,18 @@ const NewFeatureClient: React.FC = () => {
         p.tipo.toLowerCase().includes(t) ||
         p.stage.toLowerCase().includes(t);
 
-      const matchesFase = faseFilter === 'todas' || p.stage === faseFilter;
-      const matchesTipo = tipoFilter === 'todos' || p.tipo === tipoFilter;
-      const matchesCountry = countryFilter === 'todos' || p.country === countryFilter;
-      const matchesYear = yearFilter === 'todos' || p.year === yearFilter;
-
-      return matchesSearch && matchesFase && matchesTipo && matchesCountry && matchesYear;
+      return (
+        (faseFilter === 'todas' || p.stage === faseFilter) &&
+        (tipoFilter === 'todos' || p.tipo === tipoFilter) &&
+        (countryFilter === 'todos' || p.country === countryFilter) &&
+        (yearFilter === 'todos' || p.year === yearFilter) &&
+        matchesSearch
+      );
     });
   }, [searchTerm, faseFilter, tipoFilter, countryFilter, yearFilter]);
 
-  // 🔹 adapto a Project del marketplace
-  const filtered: Project[] = useMemo(
-    () => filteredDev.map(toMarketplaceProject) as Project[],
-    [filteredDev]
-  );
+  // adaptar a Project (sin precio)
+  const projects: Project[] = useMemo(() => filteredDev.map(toMarketplaceProject), [filteredDev]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -71,7 +65,6 @@ const NewFeatureClient: React.FC = () => {
         <aside className="bg-white rounded-3xl p-4 shadow-sm">
           <h2 className="text-lg font-semibold mb-4">Filtrar por:</h2>
 
-          {/* FASE */}
           <FilterSection title="Fase del proyecto">
             {(['todas', 'Piloto', 'Fase 1'] as const).map((fase) => (
               <FilterButton
@@ -83,7 +76,6 @@ const NewFeatureClient: React.FC = () => {
             ))}
           </FilterSection>
 
-          {/* TIPO */}
           <FilterSection title="Tipo de proyecto">
             {(['todos', 'Forestry', 'Eficiencia energética'] as const).map((tipo) => (
               <FilterButton
@@ -95,7 +87,6 @@ const NewFeatureClient: React.FC = () => {
             ))}
           </FilterSection>
 
-          {/* PAÍS */}
           <FilterSection title="País">
             <FilterButton
               active={countryFilter === 'todos'}
@@ -112,7 +103,6 @@ const NewFeatureClient: React.FC = () => {
             ))}
           </FilterSection>
 
-          {/* AÑO */}
           <FilterSection title="Año">
             <FilterButton
               active={yearFilter === 'todos'}
@@ -131,13 +121,17 @@ const NewFeatureClient: React.FC = () => {
         </aside>
 
         {/* LISTADO */}
-        <ProjectList
-          loading={loading}
-          projects={filtered}
-          sortBy={sortBy} // ✅ SortBy
-          setSortBy={setSortBy} // ✅ (value: SortBy) => void
-          openFilters={() => {}}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {loading && <p>Cargando…</p>}
+
+          {!loading && !projects.length && (
+            <p className="text-gray-500">No hay proyectos para mostrar</p>
+          )}
+
+          {projects.map((project) => (
+            <DevProjectCard key={project.key} project={project} />
+          ))}
+        </div>
       </div>
     </div>
   );
