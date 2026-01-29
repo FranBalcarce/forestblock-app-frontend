@@ -39,7 +39,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
       setLoading(true);
 
       try {
-        /* 1️⃣ Traer proyectos base */
+        // 1️⃣ Proyectos base
         const projectRes = await axiosPublicInstance.get<ApiListResponse<Project>>(
           '/api/carbon/carbonProjects'
         );
@@ -49,21 +49,16 @@ export default function useMarketplace(id?: string): UseMarketplace {
 
         setProjects(rawProjects);
 
-        /* 2️⃣ Enriquecer SOLO proyectos con listings */
+        // 2️⃣ Enriquecer solo proyectos con stock
         const enriched = (
           await Promise.all(
             rawProjects.map(async (project) => {
-              // ⛔ CLAVE: usar el projectId REAL (ej: VCS-1205)
               const projectId = project.projectID;
-
               if (!projectId) return null;
 
               try {
                 const pricesRes = await axiosPublicInstance.get<
-                  ApiListResponse<{
-                    purchasePrice: number;
-                    supply: number;
-                  }>
+                  ApiListResponse<{ purchasePrice: number; supply: number }>
                 >('/api/carbon/prices', {
                   params: {
                     projectIds: projectId,
@@ -72,7 +67,6 @@ export default function useMarketplace(id?: string): UseMarketplace {
                 });
 
                 const listings = unwrapArray(pricesRes.data);
-
                 if (!listings.length) return null;
 
                 const cheapest = listings.reduce((a, b) =>
@@ -83,6 +77,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
                   ...project,
                   minPrice: cheapest.purchasePrice,
                   availableSupply: cheapest.supply,
+                  displayPrice: cheapest.purchasePrice.toFixed(2),
                 } satisfies SellableProject;
               } catch {
                 return null;
@@ -95,7 +90,6 @@ export default function useMarketplace(id?: string): UseMarketplace {
 
         setSellableProjects(enriched);
 
-        /* 3️⃣ Detalle por ID */
         if (id) {
           setProject(enriched.find((p) => p.key === id) ?? null);
         }

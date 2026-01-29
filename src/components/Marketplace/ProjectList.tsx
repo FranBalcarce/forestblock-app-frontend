@@ -29,29 +29,18 @@ const ProjectList: React.FC<ProjectListProps> = ({
 }) => {
   const [currentView, setCurrentView] = useState<'grid' | 'list' | 'map'>('grid');
 
-  /* normalizamos imágenes para el mapa */
   const galleryImages: ProjectImage[] = projects
     .map((p) => p.images?.[0])
     .filter((img): img is ProjectImage => Boolean(img));
 
-  const { customIcon } = useGallery({
-    images: galleryImages,
-  });
-
-  const handleSortChange = (value: SortBy) => {
-    setSortBy(value);
-  };
-
-  const handleViewChange = (view: 'grid' | 'list' | 'map') => {
-    setCurrentView(view);
-  };
+  const { customIcon } = useGallery({ images: galleryImages });
 
   if (loading) return <SkeletonLoader />;
 
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex flex-wrap justify-end items-center gap-4 mb-5 md:my-10">
-        <SortDropdown sortBy={sortBy} setSortBy={handleSortChange} />
+        <SortDropdown sortBy={sortBy} setSortBy={setSortBy} />
 
         <button
           className="py-2 px-4 bg-white text-gray-800 rounded-full flex items-center gap-2 lg:hidden"
@@ -60,19 +49,11 @@ const ProjectList: React.FC<ProjectListProps> = ({
           <FiFilter /> Filtrar
         </button>
 
-        <ViewToggle currentView={currentView} setView={handleViewChange} />
+        <ViewToggle currentView={currentView} setView={setCurrentView} />
       </div>
 
-      {currentView === 'grid' && (
+      {currentView !== 'map' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {projects.map((project) => (
-            <ProjectCard key={project.key} project={project} actionRenderer={actionRenderer} />
-          ))}
-        </div>
-      )}
-
-      {currentView === 'list' && (
-        <div className="flex flex-col gap-4">
           {projects.map((project) => (
             <ProjectCard key={project.key} project={project} actionRenderer={actionRenderer} />
           ))}

@@ -18,16 +18,11 @@ export default function ProjectCard({ project, actionRenderer }: ProjectCardProp
   const isDevProject = project.key?.startsWith('nf-');
 
   const handlePurchase = () => {
-    if (isDevProject) {
-      router.push(`/new-feature/${project.key}`);
-      return;
-    }
-
-    router.push(`/marketplace/${project.key}`);
+    router.push(isDevProject ? `/new-feature/${project.key}` : `/marketplace/${project.key}`);
   };
 
-  const projectImage = getProjectImage(project);
-  const vintages = formatVintages(project.vintages);
+  const projectImage = getProjectImage(project) ?? '/placeholder.jpg';
+  const vintages = formatVintages(project.vintages ?? []);
 
   return (
     <div className="relative bg-white rounded-xl overflow-hidden shadow-md text-center transition-transform hover:scale-105 hover:shadow-lg h-[300px] sm:h-[360px] lg:h-[320px]">
@@ -35,8 +30,8 @@ export default function ProjectCard({ project, actionRenderer }: ProjectCardProp
 
       <OverlayContent
         vintages={vintages}
-        country={project.country}
-        category={project.methodologies?.[0]?.category}
+        country={project.country ?? '—'}
+        category={project.methodologies?.[0]?.category ?? '—'}
         name={project.name}
         price={project.displayPrice ?? '—'}
         onPurchase={handlePurchase}
