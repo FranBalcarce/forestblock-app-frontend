@@ -78,13 +78,13 @@ export default function useMarketplace(id?: string): UseMarketplace {
                   minPrice: cheapest.purchasePrice,
                   availableSupply: cheapest.supply,
                   displayPrice: cheapest.purchasePrice.toFixed(2),
-                } satisfies SellableProject;
+                };
               } catch {
                 return null;
               }
             })
           )
-        ).filter((p): p is SellableProject => p !== null);
+        ).filter(Boolean) as SellableProject[];
 
         if (!mounted) return;
 
