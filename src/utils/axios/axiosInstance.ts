@@ -3,7 +3,7 @@ import axios, { AxiosError, AxiosResponse } from 'axios';
 const rawBaseURL =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
-  'http://localhost:5000';
+  'http://localhost:5000/api'; // 👈 IMPORTANTE: agregamos /api
 
 const baseURL = rawBaseURL.replace(/\/$/, '');
 
@@ -17,7 +17,6 @@ const axiosInstance = axios.create({
 
 axiosInstance.interceptors.request.use(
   (config) => {
-    // OJO: localStorage solo existe en browser
     if (typeof window !== 'undefined') {
       const jwtToken = localStorage.getItem('forestblockToken');
       if (jwtToken) {

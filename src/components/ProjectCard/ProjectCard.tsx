@@ -9,20 +9,16 @@ import { getProjectImage } from '@/utils/getProjectImage';
 
 interface ProjectCardProps {
   project: Project;
-  actionRenderer?: (project: Project) => React.ReactNode;
+  actionRenderer?: (project: ProjectCardProps['project']) => React.ReactNode;
 }
 
-export default function ProjectCard({ project, actionRenderer }: ProjectCardProps) {
+export default function ProjectCard({ project }: ProjectCardProps) {
   const router = useRouter();
 
   const isDevProject = project.key?.startsWith('nf-');
 
-  const handlePurchase = () => {
-    if (isDevProject) {
-      router.push(`/new-feature/${project.key}`);
-      return;
-    }
-
+  const handleClick = () => {
+    if (isDevProject) return;
     router.push(`/marketplace/${project.key}`);
   };
 
@@ -38,17 +34,11 @@ export default function ProjectCard({ project, actionRenderer }: ProjectCardProp
         country={project.country}
         category={project.methodologies?.[0]?.category}
         name={project.name}
-        price={project.displayPrice ?? '—'}
-        onPurchase={handlePurchase}
+        price={project.displayPrice} // 👈 solo marketplace tiene price
+        onPurchase={handleClick}
         sdgs={project.sustainableDevelopmentGoals?.length ?? 0}
         sdgsArray={project.sustainableDevelopmentGoals ?? []}
       />
-
-      {actionRenderer && (
-        <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-          {actionRenderer(project)}
-        </div>
-      )}
     </div>
   );
 }

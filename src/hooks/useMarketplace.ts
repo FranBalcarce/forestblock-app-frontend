@@ -24,7 +24,6 @@ function unwrapArray<T>(response: ApiListResponse<T>): T[] {
 --------------------------------------------- */
 
 export default function useMarketplace(id?: string): UseMarketplace {
-  const [projects, setProjects] = useState<Project[]>([]);
   const [sellableProjects, setSellableProjects] = useState<SellableProject[]>([]);
   const [project, setProject] = useState<SellableProject | null>(null);
 
@@ -39,52 +38,79 @@ export default function useMarketplace(id?: string): UseMarketplace {
       setLoading(true);
 
       try {
-        // 1️⃣ Proyectos base
-        const projectRes = await axiosPublicInstance.get<ApiListResponse<Project>>(
-          '/api/carbon/carbonProjects'
+        /* ---------------------------------------------
+           1️⃣ Traer SOLO listings con supply > 0
+           ✅ v18 endpoint correcto
+        --------------------------------------------- */
+
+        const pricesRes = await axiosPublicInstance.get<ApiListResponse<any>>('/api/prices', {
+          params: { minSupply: 1 },
+        });
+
+        const listings = unwrapArray(pricesRes.data);
+
+        if (!listings.length) {
+          if (mounted) setSellableProjects([]);
+          return;
+        }
+
+        /* ---------------------------------------------
+           2️⃣ Agrupar por projectId y quedarnos con el más barato
+        --------------------------------------------- */
+
+        const cheapestByProject = new Map<string, any>();
+
+        for (const listing of listings) {
+          const projectId = listing?.listing?.creditId?.projectId;
+          if (!projectId) continue;
+
+          const prev = cheapestByProject.get(projectId);
+
+          if (!prev || listing.purchasePrice < prev.purchasePrice) {
+            cheapestByProject.set(projectId, listing);
+          }
+        }
+
+        const projectIds = Array.from(cheapestByProject.keys());
+
+        if (!projectIds.length) {
+          if (mounted) setSellableProjects([]);
+          return;
+        }
+
+        /* ---------------------------------------------
+           3️⃣ Traer SOLO los proyectos que tienen precio
+           ✅ v18 endpoint correcto
+        --------------------------------------------- */
+
+        const projectsRes = await axiosPublicInstance.get<ApiListResponse<Project>>(
+          '/api/carbonProjects',
+          {
+            params: {
+              projectIds: projectIds.join(','),
+            },
+          }
         );
 
-        const rawProjects = unwrapArray(projectRes.data);
-        if (!mounted) return;
+        const projects = unwrapArray(projectsRes.data);
 
-        setProjects(rawProjects);
+        /* ---------------------------------------------
+           4️⃣ Merge proyecto + precio
+        --------------------------------------------- */
 
-        // 2️⃣ Enriquecer solo proyectos con stock
-        const enriched = (
-          await Promise.all(
-            rawProjects.map(async (project) => {
-              const projectId = project.projectID;
-              if (!projectId) return null;
+        const enriched: SellableProject[] = projects
+          .map((project) => {
+            const listing = cheapestByProject.get(project.key);
+            if (!listing) return null;
 
-              try {
-                const pricesRes = await axiosPublicInstance.get<
-                  ApiListResponse<{ purchasePrice: number; supply: number }>
-                >('/api/carbon/prices', {
-                  params: {
-                    projectIds: projectId,
-                    minSupply: 1,
-                  },
-                });
-
-                const listings = unwrapArray(pricesRes.data);
-                if (!listings.length) return null;
-
-                const cheapest = listings.reduce((a, b) =>
-                  b.purchasePrice < a.purchasePrice ? b : a
-                );
-
-                return {
-                  ...project,
-                  minPrice: cheapest.purchasePrice,
-                  availableSupply: cheapest.supply,
-                  displayPrice: cheapest.purchasePrice.toFixed(2),
-                };
-              } catch {
-                return null;
-              }
-            })
-          )
-        ).filter(Boolean) as SellableProject[];
+            return {
+              ...project,
+              minPrice: listing.purchasePrice,
+              availableSupply: listing.supply,
+              displayPrice: listing.purchasePrice.toFixed(2),
+            };
+          })
+          .filter(Boolean) as SellableProject[];
 
         if (!mounted) return;
 
@@ -101,6 +127,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
     }
 
     fetchMarketplace();
+
     return () => {
       mounted = false;
     };
@@ -153,7 +180,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
   };
 
   return {
-    projects,
+    projects: sellableProjects,
     filteredProjects,
     project,
     loading,

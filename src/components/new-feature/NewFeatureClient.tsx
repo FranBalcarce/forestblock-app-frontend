@@ -52,7 +52,7 @@ const NewFeatureClient: React.FC = () => {
     });
   }, [searchTerm, faseFilter, tipoFilter, countryFilter, yearFilter]);
 
-  // adaptar a Project del marketplace (sin precio real)
+  // adaptar a Project del marketplace
   const projects: Project[] = useMemo(() => filteredDev.map(toMarketplaceProject), [filteredDev]);
 
   return (
@@ -128,7 +128,21 @@ const NewFeatureClient: React.FC = () => {
           )}
 
           {projects.map((project) => (
-            <ProjectCard key={project.key} project={project} />
+            <ProjectCard
+              key={project.key}
+              project={project}
+              actionRenderer={(project) => (
+                <a
+                  href="https://www.forestblock.tech/contact/contacto"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-sm px-4 py-2 rounded-full border border-mintGreen text-forestGreen bg-white/90 hover:bg-mintGreen/20 transition"
+                >
+                  Contactar
+                </a>
+              )}
+            />
           ))}
         </div>
       </div>
