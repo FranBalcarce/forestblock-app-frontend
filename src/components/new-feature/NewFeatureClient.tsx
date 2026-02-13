@@ -131,7 +131,7 @@ const NewFeatureClient: React.FC = () => {
             <ProjectCard
               key={project.key}
               project={project}
-              actionRenderer={(project) => (
+              actionRenderer={() => (
                 <a
                   href="https://www.forestblock.tech/contact/contacto"
                   target="_blank"

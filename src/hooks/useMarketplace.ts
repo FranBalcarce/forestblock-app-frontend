@@ -7,10 +7,24 @@ import type { Project } from '@/types/project';
 import type { UseMarketplace, RetireParams, SortBy, SellableProject } from '@/types/marketplace';
 
 /* ---------------------------------------------
-   Helpers
+   Types
 --------------------------------------------- */
 
 type ApiListResponse<T> = T[] | { items: T[] } | { data: T[] };
+
+type CarbonmarkListing = {
+  purchasePrice: number;
+  supply: number;
+  listing?: {
+    creditId?: {
+      projectId?: string;
+    };
+  };
+};
+
+/* ---------------------------------------------
+   Helpers
+--------------------------------------------- */
 
 function unwrapArray<T>(response: ApiListResponse<T>): T[] {
   if (Array.isArray(response)) return response;
@@ -40,12 +54,14 @@ export default function useMarketplace(id?: string): UseMarketplace {
       try {
         /* ---------------------------------------------
            1️⃣ Traer SOLO listings con supply > 0
-           ✅ v18 endpoint correcto
         --------------------------------------------- */
 
-        const pricesRes = await axiosPublicInstance.get<ApiListResponse<any>>('/api/prices', {
-          params: { minSupply: 1 },
-        });
+        const pricesRes = await axiosPublicInstance.get<ApiListResponse<CarbonmarkListing>>(
+          '/prices',
+          {
+            params: { minSupply: 1 },
+          }
+        );
 
         const listings = unwrapArray(pricesRes.data);
 
@@ -58,7 +74,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
            2️⃣ Agrupar por projectId y quedarnos con el más barato
         --------------------------------------------- */
 
-        const cheapestByProject = new Map<string, any>();
+        const cheapestByProject = new Map<string, CarbonmarkListing>();
 
         for (const listing of listings) {
           const projectId = listing?.listing?.creditId?.projectId;
@@ -80,11 +96,10 @@ export default function useMarketplace(id?: string): UseMarketplace {
 
         /* ---------------------------------------------
            3️⃣ Traer SOLO los proyectos que tienen precio
-           ✅ v18 endpoint correcto
         --------------------------------------------- */
 
         const projectsRes = await axiosPublicInstance.get<ApiListResponse<Project>>(
-          '/api/carbonProjects',
+          '/carbonProjects',
           {
             params: {
               projectIds: projectIds.join(','),
@@ -98,7 +113,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
            4️⃣ Merge proyecto + precio
         --------------------------------------------- */
 
-        const enriched: SellableProject[] = projects
+        const enriched = projects
           .map((project) => {
             const listing = cheapestByProject.get(project.key);
             if (!listing) return null;
