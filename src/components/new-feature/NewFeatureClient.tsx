@@ -1,29 +1,27 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import type { Project } from '@/types/project';
 
 import Header from '@/components/new-feature/header';
-import ProjectCard from '@/components/ProjectCard/ProjectCard';
-
+import DevProjectCard from '@/components/ProjectCard/DevProjectCard';
 import { DEV_PROJECTS } from '@/data/devProjects';
-import { toMarketplaceProject } from '@/utils/toMarketplaceProject';
-
-/* ------------------------------------------------ */
 
 const NewFeatureClient: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading] = useState(false);
 
-  // filtros
   const [faseFilter, setFaseFilter] = useState<'todas' | 'Piloto' | 'Fase 1'>('todas');
+
   const [tipoFilter, setTipoFilter] = useState<'todos' | 'Forestry' | 'Eficiencia energética'>(
     'todos'
   );
+
   const [countryFilter, setCountryFilter] = useState<'todos' | string>('todos');
+
   const [yearFilter, setYearFilter] = useState<'todos' | number>('todos');
 
-  // valores únicos
+  /* ---------------- valores únicos ---------------- */
+
   const countries = useMemo(() => Array.from(new Set(DEV_PROJECTS.map((p) => p.country))), []);
 
   const years = useMemo(
@@ -31,7 +29,8 @@ const NewFeatureClient: React.FC = () => {
     []
   );
 
-  // filtrado
+  /* ---------------- filtrado ---------------- */
+
   const filteredDev = useMemo(() => {
     const t = searchTerm.trim().toLowerCase();
 
@@ -51,9 +50,6 @@ const NewFeatureClient: React.FC = () => {
       );
     });
   }, [searchTerm, faseFilter, tipoFilter, countryFilter, yearFilter]);
-
-  // adaptar a Project del marketplace
-  const projects: Project[] = useMemo(() => filteredDev.map(toMarketplaceProject), [filteredDev]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -92,6 +88,7 @@ const NewFeatureClient: React.FC = () => {
               onClick={() => setCountryFilter('todos')}
               label="Todos"
             />
+
             {countries.map((c) => (
               <FilterButton
                 key={c}
@@ -108,6 +105,7 @@ const NewFeatureClient: React.FC = () => {
               onClick={() => setYearFilter('todos')}
               label="Todos"
             />
+
             {years.map((y) => (
               <FilterButton
                 key={y}
@@ -123,26 +121,12 @@ const NewFeatureClient: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {loading && <p>Cargando…</p>}
 
-          {!loading && !projects.length && (
+          {!loading && !filteredDev.length && (
             <p className="text-gray-500">No hay proyectos para mostrar</p>
           )}
 
-          {projects.map((project) => (
-            <ProjectCard
-              key={project.key}
-              project={project}
-              actionRenderer={() => (
-                <a
-                  href="https://www.forestblock.tech/contact/contacto"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-sm px-4 py-2 rounded-full border border-mintGreen text-forestGreen bg-white/90 hover:bg-mintGreen/20 transition"
-                >
-                  Contactar
-                </a>
-              )}
-            />
+          {filteredDev.map((project) => (
+            <DevProjectCard key={project.key} project={project} />
           ))}
         </div>
       </div>

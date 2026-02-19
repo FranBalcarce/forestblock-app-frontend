@@ -3,39 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { axiosPublicInstance } from '@/utils/axios/axiosPublicInstance';
 
-import type { Project } from '@/types/project';
 import type { UseMarketplace, RetireParams, SortBy, SellableProject } from '@/types/marketplace';
-
-/* ---------------------------------------------
-   Types
---------------------------------------------- */
-
-type ApiListResponse<T> = T[] | { items: T[] } | { data: T[] };
-
-type CarbonmarkListing = {
-  purchasePrice: number;
-  supply: number;
-  listing?: {
-    creditId?: {
-      projectId?: string;
-    };
-  };
-};
-
-/* ---------------------------------------------
-   Helpers
---------------------------------------------- */
-
-function unwrapArray<T>(response: ApiListResponse<T>): T[] {
-  if (Array.isArray(response)) return response;
-  if ('items' in response && Array.isArray(response.items)) return response.items;
-  if ('data' in response && Array.isArray(response.data)) return response.data;
-  return [];
-}
-
-/* ---------------------------------------------
-   Hook
---------------------------------------------- */
 
 export default function useMarketplace(id?: string): UseMarketplace {
   const [sellableProjects, setSellableProjects] = useState<SellableProject[]>([]);
@@ -49,93 +17,26 @@ export default function useMarketplace(id?: string): UseMarketplace {
     let mounted = true;
 
     async function fetchMarketplace() {
-      setLoading(true);
-
       try {
-        /* ---------------------------------------------
-           1️⃣ Traer SOLO listings con supply > 0
-        --------------------------------------------- */
+        setLoading(true);
 
-        const pricesRes = await axiosPublicInstance.get<ApiListResponse<CarbonmarkListing>>(
-          '/prices',
-          {
-            params: { minSupply: 1 },
-          }
-        );
+        const res = await axiosPublicInstance.get('/api/carbon/marketplace');
 
-        const listings = unwrapArray(pricesRes.data);
+        const items: SellableProject[] = res.data?.items ?? [];
 
-        if (!listings.length) {
-          if (mounted) setSellableProjects([]);
-          return;
-        }
-
-        /* ---------------------------------------------
-           2️⃣ Agrupar por projectId y quedarnos con el más barato
-        --------------------------------------------- */
-
-        const cheapestByProject = new Map<string, CarbonmarkListing>();
-
-        for (const listing of listings) {
-          const projectId = listing?.listing?.creditId?.projectId;
-          if (!projectId) continue;
-
-          const prev = cheapestByProject.get(projectId);
-
-          if (!prev || listing.purchasePrice < prev.purchasePrice) {
-            cheapestByProject.set(projectId, listing);
-          }
-        }
-
-        const projectIds = Array.from(cheapestByProject.keys());
-
-        if (!projectIds.length) {
-          if (mounted) setSellableProjects([]);
-          return;
-        }
-
-        /* ---------------------------------------------
-           3️⃣ Traer SOLO los proyectos que tienen precio
-        --------------------------------------------- */
-
-        const projectsRes = await axiosPublicInstance.get<ApiListResponse<Project>>(
-          '/carbonProjects',
-          {
-            params: {
-              projectIds: projectIds.join(','),
-            },
-          }
-        );
-
-        const projects = unwrapArray(projectsRes.data);
-
-        /* ---------------------------------------------
-           4️⃣ Merge proyecto + precio
-        --------------------------------------------- */
-
-        const enriched = projects
-          .map((project) => {
-            const listing = cheapestByProject.get(project.key);
-            if (!listing) return null;
-
-            return {
-              ...project,
-              minPrice: listing.purchasePrice,
-              availableSupply: listing.supply,
-              displayPrice: listing.purchasePrice.toFixed(2),
-            };
-          })
-          .filter(Boolean) as SellableProject[];
+        setSellableProjects(items);
 
         if (!mounted) return;
 
-        setSellableProjects(enriched);
+        setSellableProjects(items);
 
         if (id) {
-          setProject(enriched.find((p) => p.key === id) ?? null);
+          const found = items.find((p) => p.key === id) ?? null;
+          setProject(found);
         }
       } catch (err) {
         console.error('❌ Error fetching marketplace', err);
+        if (mounted) setSellableProjects([]);
       } finally {
         if (mounted) setLoading(false);
       }

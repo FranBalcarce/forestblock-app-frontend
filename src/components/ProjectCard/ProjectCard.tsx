@@ -1,29 +1,33 @@
+'use client';
+
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import type { Project } from '@/types/project';
+import type { SellableProject } from '@/types/marketplace';
 
 import BackgroundImage from './BackgroundImage';
 import OverlayContent from './OverlayContent';
 import { formatVintages } from '@/utils/formatVintages';
 import { getProjectImage } from '@/utils/getProjectImage';
 
-interface ProjectCardProps {
-  project: Project;
-  actionRenderer?: (project: ProjectCardProps['project']) => React.ReactNode;
+interface Props {
+  project: SellableProject;
 }
 
-export default function ProjectCard({ project }: ProjectCardProps) {
+export default function ProjectCard({ project }: Props) {
   const router = useRouter();
 
-  const isDevProject = project.key?.startsWith('nf-');
+  const projectImage = getProjectImage(project);
+  const vintages = formatVintages(project.vintages ?? []);
+
+  const displayPrice =
+    project.minPrice !== null && project.minPrice !== undefined
+      ? project.minPrice.toFixed(2)
+      : null;
 
   const handleClick = () => {
-    if (isDevProject) return;
+    if (!project.hasSupply) return;
     router.push(`/marketplace/${project.key}`);
   };
-
-  const projectImage = getProjectImage(project);
-  const vintages = formatVintages(project.vintages);
 
   return (
     <div className="relative bg-white rounded-xl overflow-hidden shadow-md text-center transition-transform hover:scale-105 hover:shadow-lg h-[300px] sm:h-[360px] lg:h-[320px]">
@@ -31,10 +35,10 @@ export default function ProjectCard({ project }: ProjectCardProps) {
 
       <OverlayContent
         vintages={vintages}
-        country={project.country}
+        country={project.country ?? ''}
         category={project.methodologies?.[0]?.category}
         name={project.name}
-        price={project.displayPrice} // 👈 solo marketplace tiene price
+        price={displayPrice}
         onPurchase={handleClick}
         sdgs={project.sustainableDevelopmentGoals?.length ?? 0}
         sdgsArray={project.sustainableDevelopmentGoals ?? []}

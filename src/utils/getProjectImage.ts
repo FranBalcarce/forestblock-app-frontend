@@ -1,5 +1,3 @@
-import { Project } from '@/types/project';
-
 /**
  * Imágenes fallback por categoría
  */
@@ -14,15 +12,24 @@ const categoryImages: Record<string, string> = {
 };
 
 /**
- * Extrae una URL válida desde cualquier formato de imagen de Carbonmark v18
+ * Tipo mínimo requerido para poder obtener imagen
+ */
+export type ProjectWithImages = {
+  coverImage?: unknown;
+  satelliteImage?: unknown;
+  images?: unknown;
+  methodologies?: { category?: string }[];
+  tipo?: string; // para DevProject
+};
+
+/**
+ * Extrae una URL válida desde cualquier formato
  */
 function extractImageUrl(img: unknown): string | null {
   if (!img) return null;
 
-  // string directo
   if (typeof img === 'string') return img;
 
-  // array de imágenes
   if (Array.isArray(img)) {
     for (const item of img) {
       const url = extractImageUrl(item);
@@ -31,12 +38,9 @@ function extractImageUrl(img: unknown): string | null {
     return null;
   }
 
-  // objeto imagen
   if (typeof img === 'object') {
     const obj = img as Record<string, unknown>;
-
-    // campos comunes en Carbonmark
-    const direct = obj.url || obj.src || obj.imageUrl || obj.cover || obj.thumbnail;
+    const direct = obj.url ?? obj.src ?? obj.imageUrl ?? obj.cover ?? obj.thumbnail;
 
     if (typeof direct === 'string') return direct;
   }
@@ -45,29 +49,25 @@ function extractImageUrl(img: unknown): string | null {
 }
 
 /**
- * Obtiene la mejor imagen posible para un proyecto
- * (compatible Carbonmark v18)
+ * Obtiene la mejor imagen posible
  */
-export function getProjectImage(project: Project): string {
-  // 1️⃣ coverImage
+export function getProjectImage(project: ProjectWithImages): string {
   const cover = extractImageUrl(project.coverImage);
   if (cover) return cover;
 
-  // 2️⃣ satelliteImage
   const satellite = extractImageUrl(project.satelliteImage);
   if (satellite) return satellite;
 
-  // 3️⃣ images[]
   const images = extractImageUrl(project.images);
   if (images) return images;
 
-  // 4️⃣ fallback por categoría
-  const category = project.methodologies?.[0]?.category;
+  // Marketplace usa methodologies
+  const category = project.methodologies?.[0]?.category || project.tipo;
+
   if (category && categoryImages[category]) {
     return categoryImages[category];
   }
 
-  // 5️⃣ fallback final
   return '/images/categories/other.png';
 }
 

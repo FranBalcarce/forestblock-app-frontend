@@ -7,16 +7,17 @@ import MapView from '../ProjectInfo/MapView';
 import { useGallery } from '@/hooks/useGallery';
 import { FiFilter } from 'react-icons/fi';
 
-import type { Project, Image as ProjectImage } from '@/types/project';
+import type { SellableProject } from '@/types/marketplace';
+import type { Image as ProjectImage } from '@/types/project';
 import type { SortBy } from '@/types/marketplace';
 
 interface ProjectListProps {
   loading: boolean;
-  projects: Project[];
+  projects: SellableProject[];
   sortBy: SortBy;
   setSortBy: (value: SortBy) => void;
   openFilters: () => void;
-  actionRenderer?: (project: Project) => React.ReactNode; // ✅ FIX
+  actionRenderer?: (project: SellableProject) => React.ReactNode;
 }
 
 const ProjectList: React.FC<ProjectListProps> = ({
@@ -29,7 +30,6 @@ const ProjectList: React.FC<ProjectListProps> = ({
 }) => {
   const [currentView, setCurrentView] = useState<'grid' | 'list' | 'map'>('grid');
 
-  /* normalizamos imágenes para el mapa */
   const galleryImages: ProjectImage[] = projects
     .map((p) => p.images?.[0])
     .filter((img): img is ProjectImage => Boolean(img));
@@ -60,7 +60,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
       {currentView !== 'map' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project) => (
-            <ProjectCard key={project.key} project={project} actionRenderer={actionRenderer} />
+            <ProjectCard key={project.key} project={project} />
           ))}
         </div>
       )}

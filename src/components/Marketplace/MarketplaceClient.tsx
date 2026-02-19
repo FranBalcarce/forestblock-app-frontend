@@ -38,7 +38,9 @@ const MarketplaceClient: React.FC = () => {
     setSelectedUNSDG,
   } = useMarketplace();
 
-  const countries = projects.length ? [...new Set(projects.map((p) => p.country))] : [];
+  const countries = projects.length
+    ? [...new Set(projects.map((p) => p.country).filter((c): c is string => Boolean(c)))]
+    : [];
 
   const { mobileFiltersOpen, setMobileFiltersOpen, onCloseMobileFilters } = useMarketplaceFilters({
     selectedCountries,

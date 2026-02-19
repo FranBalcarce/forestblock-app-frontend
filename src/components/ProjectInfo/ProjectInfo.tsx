@@ -36,9 +36,7 @@ const getImageUrl = (img: unknown): string | null => {
   return null;
 };
 
-/* ---------------------------------------------
-   Props
---------------------------------------------- */
+/* --------------------------------------------- */
 
 type Props = {
   project: Project;
@@ -46,10 +44,6 @@ type Props = {
   isPricesLoading: boolean;
   handleRetire: (params: RetireParams) => void;
 };
-
-/* ---------------------------------------------
-   Component
---------------------------------------------- */
 
 export default function ProjectInfo({
   project,
@@ -60,7 +54,7 @@ export default function ProjectInfo({
   const router = useRouter();
   const [quantity, setQuantity] = useState(1);
 
-  /* ---------- Imagen principal ---------- */
+  /* ---------- Imagen ---------- */
   const coverUrl = useMemo(() => {
     return (
       getImageUrl(project.coverImage) ||
@@ -70,7 +64,7 @@ export default function ProjectInfo({
     );
   }, [project]);
 
-  /* ---------- Coordenadas mapa ---------- */
+  /* ---------- Coordenadas ---------- */
   const mapCoords = useMemo<[number, number] | null>(() => {
     const coords = project.location?.geometry?.coordinates;
     if (!coords || coords.length < 2) return null;
@@ -82,19 +76,24 @@ export default function ProjectInfo({
     return [lat, lng];
   }, [project]);
 
-  /* ---------- Precio ---------- */
-  const displayPrice = project.minPrice !== undefined ? project.minPrice.toFixed(2) : null;
+  /* ---------- Precio seguro ---------- */
+  const numericPrice =
+    typeof project.minPrice === 'number' && Number.isFinite(project.minPrice)
+      ? project.minPrice
+      : null;
 
-  const canBuy = !isPricesLoading && project.minPrice !== undefined;
+  const displayPrice = numericPrice !== null ? numericPrice.toFixed(2) : null;
+
+  const canBuy = !isPricesLoading && numericPrice !== null;
 
   /* ---------- Comprar ---------- */
   const onBuy = () => {
-    if (project.minPrice === undefined) return;
+    if (numericPrice === null) return;
 
     handleRetire({
       id: project.key,
       index: 0,
-      priceParam: project.minPrice.toString(),
+      priceParam: numericPrice.toString(),
       selectedVintage,
       quantity,
     });
@@ -102,8 +101,6 @@ export default function ProjectInfo({
 
   const dec = () => setQuantity((q) => Math.max(1, q - 1));
   const inc = () => setQuantity((q) => q + 1);
-
-  /* --------------------------------------------- */
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-6 md:py-10">
@@ -166,7 +163,11 @@ export default function ProjectInfo({
             </div>
 
             <Button variant="quaternary" isDisabled={!canBuy} onClick={onBuy}>
-              {isPricesLoading ? 'Cargando precios...' : 'Comprar / Retirar'}
+              {isPricesLoading
+                ? 'Cargando precios...'
+                : numericPrice !== null
+                  ? 'Comprar / Retirar'
+                  : 'No disponible'}
             </Button>
           </div>
 

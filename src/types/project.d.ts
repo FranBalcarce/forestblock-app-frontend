@@ -1,50 +1,43 @@
 import { Location } from './location';
 import { Listing } from './marketplace';
 
+/**
+ * Modelo normalizado para frontend
+ * Adaptado a Carbonmark v18
+ */
 export interface Project {
-  /** 🔑 Identificador frontend */
   key: string;
-
-  /** 🔑 Project ID real del registro (VCS / PUR / GS) */
   projectID: string;
 
   name: string;
 
-  registry: string;
-  country: string;
-  region: string;
+  registry?: string;
+  country?: string;
+  region?: string;
 
-  description: string;
-  short_description: string;
-  long_description: string;
+  description?: string;
+  short_description?: string;
+  long_description?: string;
 
-  methodologies: Methodology[];
-  vintages: string[];
+  methodologies?: Methodology[];
+  vintages?: string[];
+  sustainableDevelopmentGoals?: string[];
 
-  sustainableDevelopmentGoals: string[];
+  location?: Location;
 
-  location: Location;
-
-  /** ⚠️ pueden NO existir */
   images?: Image[];
   coverImage?: Image;
-
-  /** 🛰 opcional */
   satelliteImage?: Image;
 
-  url: string;
+  url?: string;
 
-  /** 🔥 MARKETPLACE DATA (backend join) */
   minPrice?: number;
   listings?: Listing[];
 
-  /** flags */
-  hasSupply: boolean;
+  hasSupply?: boolean;
 
-  /** stats */
   stats?: Stats;
 
-  /** opcionales UI */
   category?: string;
   selectedVintage?: string;
   displayPrice?: string;
@@ -58,7 +51,7 @@ export interface Image {
 
 export interface Methodology {
   id: string;
-  category: string;
+  category?: string;
   name: string;
 }
 
