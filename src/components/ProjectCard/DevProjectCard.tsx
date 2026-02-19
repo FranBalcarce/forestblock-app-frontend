@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useRouter } from 'next/navigation';
+
 import type { DevProject } from '@/data/devProjects';
 
 import BackgroundImage from './BackgroundImage';
@@ -13,8 +13,6 @@ interface Props {
 }
 
 export default function DevProjectCard({ project }: Props) {
-  const router = useRouter();
-
   // 🔥 usamos directamente la imagen de card
   const projectImage = project.cardImage;
 

@@ -26,7 +26,6 @@ const ProjectList: React.FC<ProjectListProps> = ({
   sortBy,
   setSortBy,
   openFilters,
-  actionRenderer,
 }) => {
   const [currentView, setCurrentView] = useState<'grid' | 'list' | 'map'>('grid');
 

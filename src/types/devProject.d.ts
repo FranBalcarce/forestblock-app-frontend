@@ -13,7 +13,15 @@ export type DevProject = {
     category?: string;
   }[];
 
-  sustainableDevelopmentGoals?: any[];
+  sustainableDevelopmentGoals?: {
+    id?: number;
+    name?: string;
+    [key: string]: unknown;
+  }[];
 
-  vintages?: any[];
+  vintages?: {
+    id?: number | string;
+    year?: number;
+    [key: string]: unknown;
+  }[];
 };
