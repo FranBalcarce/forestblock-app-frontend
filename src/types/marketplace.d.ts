@@ -20,10 +20,7 @@ export type SellableProject = Project & {
 --------------------------------------------- */
 
 export interface RetireParams {
-  id: string;
-  index: number;
-  priceParam: string;
-  selectedVintage: string;
+  listingId: string;
   quantity: number;
 }
 

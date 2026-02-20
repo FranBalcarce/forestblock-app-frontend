@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+'use client';
+
+import { useState } from 'react';
 import ListingDetail from './ListingDetail';
 import { useRetire } from '@/context/RetireContext';
 import QuantitySelector from '../QuantitySelector/QuantitySelector';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import type { ListingProps } from './types';
 import { formatNumber } from '@/utils/formatNumber';
 import ListingItemSkeleton from './ListingItemSkeleton';
@@ -11,158 +12,62 @@ import type { RetireParams } from '@/types/marketplace';
 
 const MARKUP = 1.15;
 
-const ListingItem = ({
-  handleRetire,
-  matches,
-  selectedVintage,
-  displayPrice, // viene ya con 15% (UI)
-  priceParam, // viene RAW (query ?price=)
-  isPricesLoading,
-}: ListingProps) => {
-  const {
-    tonnesToRetire,
-    setTonnesToRetire,
-    index: contextIndex,
-    setIndex,
-    setTotalSupply,
-  } = useRetire();
+const ListingItem = ({ handleRetire, matches, isPricesLoading }: ListingProps) => {
+  const { tonnesToRetire, setTonnesToRetire } = useRetire();
 
-  const router = useRouter();
-
-  const safeInitialIndex = typeof contextIndex === 'number' && contextIndex >= 0 ? contextIndex : 0;
-  const [localIndex, setLocalIndex] = useState<number>(safeInitialIndex);
-  const [defaultIndex, setDefaultIndex] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (defaultIndex === null && matches.length > 0) {
-      let computedIndex = matches.findIndex((match) => {
-        const matchVintage = match.listing
-          ? match.listing?.creditId?.vintage?.toString()
-          : match.carbonPool?.creditId?.vintage?.toString();
-
-        const matchPriceRaw = match.purchasePrice?.toFixed(2);
-        return matchVintage === selectedVintage && matchPriceRaw === (priceParam ?? '');
-      });
-
-      if (computedIndex === -1) {
-        computedIndex = matches.findIndex((match) => {
-          const matchVintage = match.listing
-            ? match.listing?.creditId?.vintage?.toString()
-            : match.carbonPool?.creditId?.vintage?.toString();
-          return matchVintage === selectedVintage;
-        });
-      }
-
-      if (computedIndex === -1) computedIndex = 0;
-
-      setDefaultIndex(computedIndex);
-      setLocalIndex(computedIndex);
-      setIndex(computedIndex);
-
-      setTotalSupply(matches[computedIndex]?.supply ?? 0);
-    }
-  }, [defaultIndex, matches, selectedVintage, priceParam, setIndex, setTotalSupply]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   if (isPricesLoading) return <ListingItemSkeleton />;
 
-  // ✅ si no hay matches, no se puede retirar
   if (!matches || matches.length === 0) {
     return (
       <div className="p-6 rounded-xl border border-gray-200">
         <p className="text-gray-600">
-          No hay precios disponibles para este proyecto en este momento.
+          No hay listings disponibles para este proyecto en este momento.
         </p>
       </div>
     );
   }
 
-  const effectiveIndex = localIndex;
-  const selectedMatch = matches[effectiveIndex] || matches[0];
+  const selectedListing = matches[selectedIndex];
 
-  const priceRaw = selectedMatch?.purchasePrice ?? 0; // ✅ RAW
-  const priceFinal = Number.isFinite(priceRaw) ? priceRaw * MARKUP : 0; // ✅ con 15%
+  const priceRaw = Number(selectedListing?.singleUnitPrice ?? 0);
+  const priceFinal = priceRaw * MARKUP;
 
-  const availableTonnes = selectedMatch?.supply ?? 0;
+  const availableTonnes = Number(selectedListing?.leftToSell ?? 0);
 
-  const total = Number(priceFinal) * Number(tonnesToRetire);
-  const value = formatNumber(total);
+  const total = priceFinal * tonnesToRetire;
+  const formattedTotal = formatNumber(total);
 
-  const formattedSupply =
-    typeof availableTonnes === 'number'
-      ? `${new Intl.NumberFormat('es-ES', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        }).format(availableTonnes)} ton`
-      : String(availableTonnes);
-
-  const selectedMatchVintage =
-    selectedMatch?.listing?.creditId?.vintage != null
-      ? String(selectedMatch.listing.creditId.vintage)
-      : selectedMatch?.carbonPool?.creditId?.vintage != null
-      ? String(selectedMatch.carbonPool.creditId.vintage)
-      : selectedVintage ?? '';
-
-  const projectId =
-    selectedMatch?.listing?.creditId?.projectId ??
-    selectedMatch?.carbonPool?.creditId?.projectId ??
-    '';
-
-  // ✅ priceParam para retirar SIEMPRE RAW
-  const effectivePriceParam = Number.isFinite(priceRaw) ? Number(priceRaw).toFixed(2) : '';
-
-  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newIndex = Number(e.target.value);
-    setLocalIndex(newIndex);
-    setIndex(newIndex);
-
-    const newPriceRaw = matches[newIndex]?.purchasePrice;
-    if (newPriceRaw == null) return;
-
-    setTotalSupply(matches[newIndex]?.supply ?? 0);
-
-    router.replace(
-      `?price=${newPriceRaw.toFixed(2)}&vintages=${matches
-        .map((match) =>
-          match.listing
-            ? match.listing?.creditId?.vintage?.toString()
-            : match.carbonPool?.creditId?.vintage?.toString()
-        )
-        .filter(Boolean)
-        .join(',')}`
-    );
-  };
+  const formattedSupply = new Intl.NumberFormat('es-ES', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(availableTonnes);
 
   const isDisabled =
-    !projectId ||
-    !effectivePriceParam ||
-    !selectedMatchVintage ||
-    tonnesToRetire <= 0 ||
-    tonnesToRetire > availableTonnes;
+    !selectedListing?.id || tonnesToRetire <= 0 || tonnesToRetire > availableTonnes;
 
   const retireParams: RetireParams = {
-    id: projectId,
-    index: effectiveIndex,
-    priceParam: effectivePriceParam, // ✅ RAW
-    selectedVintage: selectedMatchVintage,
+    listingId: selectedListing.id,
     quantity: tonnesToRetire,
   };
 
   return (
     <div className="relative pb-6 mb-8 last:mb-0 flex flex-col gap-5 h-auto">
+      {/* Selector de Listing */}
       <ListingDetail
-        label="Año"
+        label="Listing"
         value={
-          <select className="w-full" onChange={handleSelectChange} value={effectiveIndex}>
-            {matches.map((match, i) => {
-              const matchVintage = match.listing
-                ? match.listing?.creditId?.vintage?.toString()
-                : match.carbonPool?.creditId?.vintage?.toString();
-              return (
-                <option key={i} value={i}>
-                  {matchVintage}
-                </option>
-              );
-            })}
+          <select
+            className="w-full"
+            value={selectedIndex}
+            onChange={(e) => setSelectedIndex(Number(e.target.value))}
+          >
+            {matches.map((listing, i) => (
+              <option key={listing.id} value={i}>
+                {listing.project?.name} - ${Number(listing.singleUnitPrice).toFixed(2)}
+              </option>
+            ))}
           </select>
         }
       />
@@ -173,23 +78,16 @@ const ListingItem = ({
         label="Precio"
         value={
           <span>
-            <span className="text-forestGreen font-bold font-neueMontreal text-[23px]">
-              $
-              {Number.isFinite(priceFinal) ? Number(priceFinal).toFixed(2) : displayPrice ?? '0.00'}
-            </span>{' '}
-            <span className="text-customGray text-[23px] font-neueMontreal">/tCO2e</span>
+            <span className="text-forestGreen font-bold text-[23px]">${priceFinal.toFixed(2)}</span>{' '}
+            <span className="text-customGray text-[23px]">/tCO2e</span>
           </span>
         }
       />
 
       <div className="w-full h-[1px] bg-gray-300" />
 
-      <ListingDetail label="Antigüedad" value={selectedMatchVintage || 'N/A'} />
-
-      <div className="w-full h-[1px] bg-gray-300" />
-
       <div className="flex justify-between items-center">
-        <label className="text-customGray text-[23px] font-aeonik">Cantidad</label>
+        <label className="text-customGray text-[23px]">Cantidad</label>
         <div className="flex flex-col items-end">
           <QuantitySelector
             value={tonnesToRetire}
@@ -198,41 +96,23 @@ const ListingItem = ({
             max={availableTonnes}
             step={0.1}
           />
-          <span className="font-neueMontreal">/tCO2e</span>
+          <span>/tCO2e</span>
         </div>
       </div>
 
       <div className="w-full h-[1px] bg-gray-300" />
-      <ListingDetail label="Available tonnes" value={formattedSupply} />
-      <div className="w-full h-[1px] bg-gray-300" />
 
-      <div className="flex justify-between items-center">
-        <p className="text-customGray text-[23px] font-aeonik">Asset</p>
-        <p className="text-forestGreen text-[23px] font-aeonik">
-          <Link
-            href={`https://polygonscan.com/address/${
-              selectedMatch?.listing
-                ? selectedMatch.listing.token.address
-                : selectedMatch?.carbonPool?.token.address ?? ''
-            }`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-forestGreen underline"
-          >
-            {projectId}
-          </Link>
-        </p>
-      </div>
+      <ListingDetail label="Toneladas disponibles" value={`${formattedSupply} tCO2e`} />
 
       <div className="w-full h-[1px] bg-gray-300" />
 
       <div className="flex justify-between items-center text-[23px] text-customGray">
-        <span className="font-aeonik">Total</span>
-        <span className="font-neueMontreal">${value}</span>
+        <span>Total</span>
+        <span className="font-bold text-forestGreen">${formattedTotal}</span>
       </div>
 
       <button
-        className="mt-2 w-full px-4 py-4 bg-mintGreen text-forestGreen font-medium font-aeonik rounded-full shadow text-[23px] z-40 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="mt-4 w-full px-4 py-4 bg-mintGreen text-forestGreen rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
         disabled={isDisabled}
         onClick={() => handleRetire(retireParams)}
       >

@@ -85,10 +85,7 @@ export default function useMarketplace(id?: string): UseMarketplace {
 
   const handleRetire = (params: RetireParams) => {
     const sp = new URLSearchParams({
-      id: params.id,
-      index: String(params.index),
-      price: params.priceParam,
-      selectedVintage: params.selectedVintage,
+      listingId: params.listingId,
       quantity: String(params.quantity),
     });
 
