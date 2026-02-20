@@ -40,17 +40,11 @@ const getImageUrl = (img: unknown): string | null => {
 
 type Props = {
   project: Project;
-  selectedVintage: string;
   isPricesLoading: boolean;
   handleRetire: (params: RetireParams) => void;
 };
 
-export default function ProjectInfo({
-  project,
-  selectedVintage,
-  isPricesLoading,
-  handleRetire,
-}: Props) {
+export default function ProjectInfo({ project, isPricesLoading, handleRetire }: Props) {
   const router = useRouter();
   const [quantity, setQuantity] = useState(1);
 
@@ -84,15 +78,15 @@ export default function ProjectInfo({
 
   const displayPrice = numericPrice !== null ? numericPrice.toFixed(2) : null;
 
-  const canBuy = !isPricesLoading && numericPrice !== null;
+  const canBuy = !isPricesLoading && numericPrice !== null && project.listings?.length;
 
   /* ---------- Comprar ---------- */
   const onBuy = () => {
-    if (numericPrice === null) return;
+    if (!project.listings?.length) return;
 
     handleRetire({
-      listingId: project.listings?.[0]?.id ?? '',
-      quantity: 1,
+      listingId: project.listings[0].id,
+      quantity,
     });
   };
 
