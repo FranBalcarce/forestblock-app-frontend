@@ -14,16 +14,16 @@ import CheckoutHeader from '@/components/CheckoutHeader/CheckoutHeader';
 import Instructions from '@/app/retireCheckout/ui/Instructions';
 import LoaderScreenDynamic from '@/components/LoaderScreen/LoaderScreenDynamic';
 
+import type { Project } from '@/types/project';
+
 const RetireCheckoutClient: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
 
   const searchParams = useSearchParams();
   const methodologyName = searchParams.get('methodologyName') || 'Sin metodología';
-  const index = searchParams.get('index');
   const selectedVintage = searchParams.get('selectedVintage');
 
-  const { listing, loading, error, calculateTotalCost, handleStripeCheckout, project } =
-    useRetireCheckout(index);
+  const { listing, loading, error, calculateTotalCost, handleStripeCheckout } = useRetireCheckout();
 
   const router = useRouter();
   const { tonnesToRetire, setTonnesToRetire, setBeneficiary, setMessage } = useRetire();
@@ -31,6 +31,8 @@ const RetireCheckoutClient: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('selectedVintage', selectedVintage ?? '0');
   }, [selectedVintage]);
+
+  const project = listing?.project as Project | null;
 
   if (loading) return <LoaderScreenDynamic />;
   if (error) return <p className="text-red-500">{error}</p>;
@@ -95,7 +97,6 @@ const RetireCheckoutClient: React.FC = () => {
 };
 
 export default RetireCheckoutClient;
-
 // 'use client';
 
 // import React, { useEffect, useState } from 'react';

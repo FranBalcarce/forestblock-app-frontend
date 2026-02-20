@@ -2,7 +2,7 @@ import React from 'react';
 import HeaderBackground from '@/components/HeaderBackground/HeaderBackground';
 import BackButton from '@/components/BackButton/BackButton';
 import ProjectDetails from '@/components/ProjectDetails/ProjectDetails';
-import { Project } from '@/types/project';
+import type { Project } from '@/types/project';
 
 interface CheckoutHeaderProps {
   onGoBack: () => void;
