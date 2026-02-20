@@ -91,11 +91,8 @@ export default function ProjectInfo({
     if (numericPrice === null) return;
 
     handleRetire({
-      id: project.key,
-      index: 0,
-      priceParam: numericPrice.toString(),
-      selectedVintage,
-      quantity,
+      listingId: project.listings?.[0]?.id ?? '',
+      quantity: 1,
     });
   };
 
