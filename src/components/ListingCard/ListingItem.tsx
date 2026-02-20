@@ -4,7 +4,6 @@ import { useState } from 'react';
 import ListingDetail from './ListingDetail';
 import { useRetire } from '@/context/RetireContext';
 import QuantitySelector from '../QuantitySelector/QuantitySelector';
-import Link from 'next/link';
 import type { ListingProps } from './types';
 import { formatNumber } from '@/utils/formatNumber';
 import ListingItemSkeleton from './ListingItemSkeleton';

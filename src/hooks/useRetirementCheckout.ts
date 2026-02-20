@@ -16,7 +16,10 @@ type Listing = {
   id: string;
   singleUnitPrice: number;
   leftToSell: number;
-  project: any;
+  project: {
+    id?: string;
+    name?: string;
+  };
 };
 
 export const useRetireCheckout = () => {
