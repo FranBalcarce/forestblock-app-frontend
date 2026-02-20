@@ -13,12 +13,5 @@ export default function MarketplaceByIdClient({ id }: Props) {
   if (loading) return null;
   if (!project) return null;
 
-  return (
-    <ProjectInfo
-      project={project}
-      selectedVintage=""
-      handleRetire={handleRetire}
-      isPricesLoading={false}
-    />
-  );
+  return <ProjectInfo project={project} handleRetire={handleRetire} isPricesLoading={false} />;
 }
